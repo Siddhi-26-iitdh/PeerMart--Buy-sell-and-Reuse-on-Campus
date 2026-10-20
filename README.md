@@ -1,79 +1,77 @@
-# PeerMart — Buy, Sell and Reuse on Campus
-
-PeerMart is a campus-focused online marketplace that enables students to buy and sell second-hand items within their college community. It aims to make student life more affordable and encourage product reuse.
+# PeerMart – Buy, Sell and Reuse on Campus
 
 ## Project Overview
 
-- Students can list items such as bicycles, textbooks, calculators, electronic gadgets, furniture, hostel essentials, and sports equipment.
-- Buyers can browse available products and connect with sellers to coordinate transactions.
-- The platform is designed to support product listings, search and filtering, and AI-powered natural-language search.
+PeerMart is a campus-focused online marketplace that enables students to buy and sell second-hand items within their college community. Students can list items they no longer need, such as bicycles, textbooks, calculators, electronic gadgets, furniture, hostel essentials, and sports equipment. Other students can browse listings and purchase items at affordable prices.
 
-## Target Users
+PeerMart encourages the reuse of products and facilitates convenient peer-to-peer transactions within the campus community, making student life more affordable, convenient, and sustainable.
 
-- Senior and graduating students who want to sell items before leaving campus.
-- Junior students and new entrants looking for affordable second-hand items.
-- Current students who want to buy, sell, or exchange items within the campus community.
-- Student buyers and sellers who want to discover products and compare prices.
+## Features
 
-## Planned Features
+- **Home Page:** Browse products from different categories and explore available listings.
+- **Conventional Search:** Search and filter products by category, maximum price, and condition.
+- **AI-Powered Natural-Language Search:** Search for products using ordinary sentences instead of manually applying filters.
+- **Category Pages:** View listings belonging to a selected category and apply filters.
+- **Product Details:** View product images, title, price, condition, and description.
+- **User Registration and Login:** Create an account and access features available to registered users.
+- **Sell an Item:** Create product listings with a category, title, description, condition, and 2–5 images.
+- **My Sell:** Manage listings under Available, Negotiating, and Sold.
+- **Cart:** View available products added to the cart, remove items, and review the total price.
+- **Favourites:** Save products for later and remove them from favourites.
+- **Make Offer:** Contact sellers and arrange negotiations outside PeerMart.
+- **My Orders:** View ongoing negotiations, completed transactions, and receipts.
+- **Receipt Generation:** Generate a peer-to-peer sale receipt containing product details, final agreed price, and buyer and seller information.
+- **Admin Dashboard:** Monitor registered users and product listings, warn users about reported fraudulent activity, and delete accounts when necessary.
+- **Terms and Conditions:** View and download the rules and policies for buyers and sellers.
 
-- Home page with product categories and featured or recently added products.
-- Browse categories and view products in a selected category.
-- Product search and filtering by keyword, category, price, condition, and availability.
-- AI-powered natural-language product search.
-- User registration and login.
-- Product details with images, price, description, category, and seller information.
-- Seller dashboard to manage product listings.
-- Add, edit, delete, and update availability of product listings.
-- Favourites and cart.
-- Checkout and order placement.
-- Order confirmation, order status, and My Orders page.
-- Seller order and sales management.
+## AI-Powered Natural-Language Product Search
 
-## AI-Powered Natural-Language Search
+PeerMart includes an AI-powered search feature that interprets natural-language queries and extracts relevant product-search criteria, such as category, price, condition, and other attributes.
 
-- Planned use of the Google Gemini API to interpret natural-language search queries.
-- Extract search criteria such as product category, price, and condition.
-- Validate the extracted criteria in the backend before searching the MySQL database.
-- Provide conventional keyword search and filters if the AI service fails.
-- Evaluate the feature using a predefined set of natural-language queries.
+For example, a user can enter:
+
+`Find a used bicycle under 3000`
+
+The system interprets the query and uses the extracted criteria to find matching product listings.
+
+If the AI service fails or becomes unavailable, users can continue searching through conventional search and filters.
+
+The feature also includes input validation, rate limiting, prompt-injection handling, API-key protection, and evaluation using predefined test queries.
 
 ## Dataset
 
-- Custom-generated synthetic dataset created locally using Python and the Faker library.
-- No real student personal information will be used.
-- Planned data components:
-  - Users
-  - Categories
-  - Products
-  - Orders
-  - Order Items
-  - AI Evaluation Set
-- Generated data will be exported as CSV files and imported into MySQL.
-- A fixed random seed will be used to make sample data generation reproducible.
+PeerMart will use a custom dataset prepared by the project team.
 
-## Planned Technology Stack
+- **Product categories:** 9 categories, including 8 product categories and 1 Other category.
+- **Product listings:** 45 second-hand products, with at least one product from each category.
+- **Product images:** Each product will have 2–5 images.
+- **Fictional user accounts:** 20 accounts, comprising 19 student accounts and 1 admin account.
+- **AI evaluation dataset:** 50 predefined natural-language queries covering genuine searches, prompt-injection attempts, and invalid or ambiguous inputs.
+- **Privacy:** Fictional user accounts will be used for the sample dataset.
 
-- **Backend:** Python with FastAPI or Flask
-- **Database:** MySQL 8
-- **API:** OpenAPI 3.x
-- **Frontend:** HTML, CSS, and JavaScript
-- **AI service:** Google Gemini API
-- **Testing:** pytest and pytest-cov; Playwright for end-to-end tests
-- **Continuous integration:** GitHub Actions
-- **Containerisation:** Docker and Docker Compose
+## Transaction Process
+
+PeerMart facilitates peer-to-peer transactions between students.
+
+1. The buyer browses products and sends an offer to the seller.
+2. The buyer and seller negotiate outside PeerMart through email or in person.
+3. They arrange the price, meeting, and product handover.
+4. The buyer inspects the item in person and pays the seller directly in cash.
+5. Once the deal is completed, the seller records the sale by selecting the buyer and entering the final agreed price.
+6. The seller generates a receipt, and the sold listing is automatically removed.
+
+## Target Users
+
+- **Senior and graduating students:** Students who want to sell their belongings before leaving campus.
+- **Junior students and new entrants:** Students looking for affordable second-hand items.
+- **Current students:** Students who want to buy or sell items within their campus community.
 
 ## Team Members
 
-- **CS26MT007** — Siddhi Avhad
-- **CS26MT008** — Isha Bhardwaj
-- **CS26MT013** — Radhemohan Yadav
+- **CS26MT007** – Siddhi Avhad
+- **CS26MT008** – Isha Bhardwaj
+- **CS26MT013** – Radhemohan Yadav
 
-## Project Information
+**Project Guide:** Prof. Gayathri A.
 
-- **Project:** PeerMart — Buy, Sell and Reuse on Campus
-- **Course:** CS602C — Advanced Software Development Laboratory
-- **Guide:** Prof. Gayathri A.
-
----
-
+**Course:** CS602C – Advanced Software Development Laboratory
