@@ -42,8 +42,8 @@ The feature also includes input validation, rate limiting, prompt-injection hand
 
 PeerMart will use a custom dataset prepared by the project team.
 
-- **Product categories:** 9 categories, including 8 product categories and 1 Other category.
-- **Product listings:** 45 second-hand products, with at least one product from each category.
+- **Product categories:** 8 categories, including 7 product categories and 1 Other category.
+- **Product listings:** 48 second-hand products, with at least one product from each category.
 - **Product images:** Each product will have 2–5 images.
 - **Fictional user accounts:** 20 accounts, comprising 19 student accounts and 1 admin account.
 - **AI evaluation dataset:** 50 predefined natural-language queries covering genuine searches, prompt-injection attempts, and invalid or ambiguous inputs.
