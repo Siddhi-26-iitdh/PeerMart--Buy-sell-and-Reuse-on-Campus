@@ -13,22 +13,22 @@ router = APIRouter(prefix="/cart-items", tags=["CartItem"])
 @router.get("", response_model=CartItemListResponse)
 def list_cart_items(
     page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
+    size: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     total = db.scalar(select(func.count()).select_from(CartItem))
     items = db.scalars(
         select(CartItem)
         .order_by(CartItem.cart_item_id)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        .offset((page - 1) * size)
+        .limit(size)
     ).all()
 
     return {
         "items": items,
         "total": total,
         "page": page,
-        "page_size": page_size,
+        "size": size,
     }
 
 

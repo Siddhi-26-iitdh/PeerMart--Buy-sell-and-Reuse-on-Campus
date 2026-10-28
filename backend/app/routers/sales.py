@@ -13,22 +13,22 @@ router = APIRouter(prefix="/sales", tags=["Sale"])
 @router.get("", response_model=SaleListResponse)
 def list_sales(
     page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
+    size: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     total = db.scalar(select(func.count()).select_from(Sale))
     items = db.scalars(
         select(Sale)
         .order_by(Sale.sale_id)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        .offset((page - 1) * size)
+        .limit(size)
     ).all()
 
     return {
         "items": items,
         "total": total,
         "page": page,
-        "page_size": page_size,
+        "size": size,
     }
 
 

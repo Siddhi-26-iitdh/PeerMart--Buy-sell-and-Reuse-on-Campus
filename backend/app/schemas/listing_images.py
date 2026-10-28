@@ -17,4 +17,4 @@ class ListingImageListResponse(BaseModel):
     items: list[ListingImageResponse]
     total: int
     page: int
-    page_size: int
+    size: int

@@ -12,7 +12,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 @router.get("", response_model=UserListResponse)
 def list_users(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=10, ge=1, le=100),
+    size: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     total = db.scalar(select(func.count()).select_from(User))
@@ -20,8 +20,8 @@ def list_users(
     users = db.scalars(
         select(User)
         .order_by(User.user_id)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        .offset((page - 1) * size)
+        .limit(size)
     ).all()
 
     return {
@@ -31,7 +31,7 @@ def list_users(
         ],
         "total": total,
         "page": page,
-        "page_size": page_size,
+        "size": size,
     }
 
 @router.get(

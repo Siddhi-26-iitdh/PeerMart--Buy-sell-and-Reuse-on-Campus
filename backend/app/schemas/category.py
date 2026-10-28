@@ -11,3 +11,5 @@ class CategoryResponse(BaseModel):
 class CategoryListResponse(BaseModel):
     items: list[CategoryResponse]
     total: int
+    page: int
+    size: int

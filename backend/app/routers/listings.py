@@ -15,7 +15,7 @@ router = APIRouter(prefix="/listings", tags=["Listings"])
 @router.get("", response_model=ListingListResponse)
 def list_listings(
     page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
+    size: int = Query(10, ge=1, le=100),
     category_id: int | None = Query(None, ge=1),
     min_price: Decimal | None = Query(None, ge=0),
     max_price: Decimal | None = Query(None, ge=0),
@@ -54,15 +54,15 @@ def list_listings(
         select(Listing)
         .where(*filters)
         .order_by(Listing.created_at.desc(), Listing.listing_id.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        .offset((page - 1) * size)
+        .limit(size)
     ).all()
 
     return {
         "items": listings,
         "total": total,
         "page": page,
-        "page_size": page_size,
+        "size": size,
     }
 
 

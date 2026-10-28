@@ -13,22 +13,22 @@ router = APIRouter(prefix="/favourites", tags=["Favourite"])
 @router.get("", response_model=FavouriteListResponse)
 def list_favourites(
     page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
+    size: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     total = db.scalar(select(func.count()).select_from(Favourite))
     items = db.scalars(
         select(Favourite)
         .order_by(Favourite.favourite_id)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        .offset((page - 1) * size)
+        .limit(size)
     ).all()
 
     return {
         "items": items,
         "total": total,
         "page": page,
-        "page_size": page_size,
+        "size": size,
     }
 
 

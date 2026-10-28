@@ -16,4 +16,4 @@ class CartItemListResponse(BaseModel):
     items: list[CartItemResponse]
     total: int
     page: int
-    page_size: int
+    size: int

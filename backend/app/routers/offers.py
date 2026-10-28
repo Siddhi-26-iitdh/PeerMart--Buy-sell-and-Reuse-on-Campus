@@ -13,22 +13,22 @@ router = APIRouter(prefix="/offers", tags=["Offer"])
 @router.get("", response_model=OfferListResponse)
 def list_offers(
     page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
+    size: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     total = db.scalar(select(func.count()).select_from(Offer))
     items = db.scalars(
         select(Offer)
         .order_by(Offer.offer_id)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        .offset((page - 1) * size)
+        .limit(size)
     ).all()
 
     return {
         "items": items,
         "total": total,
         "page": page,
-        "page_size": page_size,
+        "size": size,
     }
 
 

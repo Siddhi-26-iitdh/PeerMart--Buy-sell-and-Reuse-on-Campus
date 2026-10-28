@@ -17,4 +17,4 @@ class SaleListResponse(BaseModel):
     items: list[SaleResponse]
     total: int
     page: int
-    page_size: int
+    size: int

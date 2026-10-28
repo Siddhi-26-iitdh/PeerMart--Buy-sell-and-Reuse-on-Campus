@@ -25,4 +25,4 @@ class ListingListResponse(BaseModel):
     items: list[ListingResponse]
     total: int
     page: int
-    page_size: int
+    size: int

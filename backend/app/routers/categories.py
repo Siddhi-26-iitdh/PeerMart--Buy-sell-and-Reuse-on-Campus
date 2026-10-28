@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -11,16 +11,24 @@ router = APIRouter(prefix="/categories", tags=["Categories"])
 
 
 @router.get("", response_model=CategoryListResponse)
-def list_categories(db: Session = Depends(get_db)):
+def list_categories(
+    page: int = Query(1, ge=1),
+    size: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
     total = db.scalar(select(func.count()).select_from(Category))
 
     categories = db.scalars(
         select(Category).order_by(Category.category_id)
+        .offset((page - 1) * size)
+        .limit(size)
     ).all()
 
     return {
         "items": categories,
         "total": total,
+        "page": page,
+        "size": size,
     }
 
 

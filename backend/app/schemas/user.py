@@ -21,4 +21,4 @@ class UserListResponse(BaseModel):
     items: list[UserResponse]
     total: int
     page: int
-    page_size: int
+    size: int

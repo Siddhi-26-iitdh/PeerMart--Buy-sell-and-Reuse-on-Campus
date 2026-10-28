@@ -19,4 +19,4 @@ class OfferListResponse(BaseModel):
     items: list[OfferResponse]
     total: int
     page: int
-    page_size: int
+    size: int

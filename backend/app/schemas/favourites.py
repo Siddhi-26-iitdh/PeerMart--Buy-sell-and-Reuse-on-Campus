@@ -16,4 +16,4 @@ class FavouriteListResponse(BaseModel):
     items: list[FavouriteResponse]
     total: int
     page: int
-    page_size: int
+    size: int
