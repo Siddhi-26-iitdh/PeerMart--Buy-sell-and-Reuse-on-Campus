@@ -1,0 +1,1826 @@
+openapi: 3.1.0
+info:
+  title: PeerMart API
+  description: Campus marketplace backend for buying, selling, and reusing products.
+  version: 0.1.0
+paths:
+  /api/users:
+    get:
+      tags:
+      - Users
+      summary: List Users
+      operationId: list_users_api_users_get
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 10
+          title: Size
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+        '422':
+          $ref: '#/components/responses/Error422'
+  /api/users/{user_id}:
+    get:
+      tags:
+      - Users
+      summary: Get User
+      operationId: get_user_api_users__user_id__get
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: User Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '422':
+          $ref: '#/components/responses/Error422'
+  /api/categories:
+    get:
+      tags:
+      - Categories
+      summary: List Categories
+      operationId: list_categories_api_categories_get
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 10
+          title: Size
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryListResponse'
+        '422':
+          $ref: '#/components/responses/Error422'
+  /api/categories/{category_id}:
+    get:
+      tags:
+      - Categories
+      summary: Get Category
+      operationId: get_category_api_categories__category_id__get
+      parameters:
+      - name: category_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Category Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '422':
+          $ref: '#/components/responses/Error422'
+  /api/listings:
+    get:
+      tags:
+      - Listings
+      summary: List Listings
+      operationId: list_listings_api_listings_get
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 10
+          title: Size
+      - name: category_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          title: Category Id
+      - name: min_price
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+          - type: 'null'
+          title: Min Price
+      - name: max_price
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+          - type: 'null'
+          title: Max Price
+      - name: item_condition
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Item Condition
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingListResponse'
+        '422':
+          $ref: '#/components/responses/Error422'
+    post:
+      tags:
+      - Listings
+      summary: Create listing
+      operationId: planned_post_api_listings
+      responses:
+        '422':
+          $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '201':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingResponse'
+      x-implementation-status: planned
+      security:
+      - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingCreateRequest'
+  /api/listings/{listing_id}:
+    get:
+      tags:
+      - Listings
+      summary: Get Listing
+      operationId: get_listing_api_listings__listing_id__get
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Listing Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingResponse'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '422':
+          $ref: '#/components/responses/Error422'
+  /health:
+    get:
+      tags:
+      - Health
+      summary: Health Check
+      operationId: health_check_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          $ref: '#/components/responses/Error422'
+  /api/listing-images:
+    get:
+      tags:
+      - ListingImage
+      summary: List Listing Images
+      operationId: list_listing_images_api_listing_images_get
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 10
+          title: Size
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingImageListResponse'
+        '422':
+          $ref: '#/components/responses/Error422'
+  /api/listing-images/{item_id}:
+    get:
+      tags:
+      - ListingImage
+      summary: Get Listing Image
+      operationId: get_listing_image_api_listing_images__item_id__get
+      parameters:
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Item Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingImageResponse'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '422':
+          $ref: '#/components/responses/Error422'
+  /api/cart-items:
+    get:
+      tags:
+      - CartItem
+      summary: List Cart Items
+      operationId: list_cart_items_api_cart_items_get
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 10
+          title: Size
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItemListResponse'
+        '422':
+          $ref: '#/components/responses/Error422'
+  /api/cart-items/{item_id}:
+    get:
+      tags:
+      - CartItem
+      summary: Get Cart Item
+      operationId: get_cart_item_api_cart_items__item_id__get
+      parameters:
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Item Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItemResponse'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '422':
+          $ref: '#/components/responses/Error422'
+  /api/favourites:
+    get:
+      tags:
+      - Favourite
+      summary: List Favourites
+      operationId: list_favourites_api_favourites_get
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 10
+          title: Size
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavouriteListResponse'
+        '422':
+          $ref: '#/components/responses/Error422'
+  /api/favourites/{item_id}:
+    get:
+      tags:
+      - Favourite
+      summary: Get Favourite
+      operationId: get_favourite_api_favourites__item_id__get
+      parameters:
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Item Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavouriteResponse'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '422':
+          $ref: '#/components/responses/Error422'
+  /api/offers:
+    get:
+      tags:
+      - Offer
+      summary: List Offers
+      operationId: list_offers_api_offers_get
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 10
+          title: Size
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferListResponse'
+        '422':
+          $ref: '#/components/responses/Error422'
+    post:
+      tags:
+      - Offers
+      summary: Submit an offer
+      operationId: planned_post_api_offers
+      responses:
+        '422':
+          $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '201':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferResponse'
+      x-implementation-status: planned
+      security:
+      - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfferCreateRequest'
+  /api/offers/{item_id}:
+    get:
+      tags:
+      - Offer
+      summary: Get Offer
+      operationId: get_offer_api_offers__item_id__get
+      parameters:
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Item Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferResponse'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '422':
+          $ref: '#/components/responses/Error422'
+  /api/sales:
+    get:
+      tags:
+      - Sale
+      summary: List Sales
+      operationId: list_sales_api_sales_get
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 10
+          title: Size
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaleListResponse'
+        '422':
+          $ref: '#/components/responses/Error422'
+  /api/sales/{item_id}:
+    get:
+      tags:
+      - Sale
+      summary: Get Sale
+      operationId: get_sale_api_sales__item_id__get
+      parameters:
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Item Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaleResponse'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '422':
+          $ref: '#/components/responses/Error422'
+  /api/auth/register:
+    post:
+      tags:
+      - Authentication
+      summary: Register a user
+      operationId: planned_post_api_auth_register
+      responses:
+        '422':
+          $ref: '#/components/responses/Error422'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '201':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+      x-implementation-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+  /api/auth/login:
+    post:
+      tags:
+      - Authentication
+      summary: Log in
+      operationId: planned_post_api_auth_login
+      responses:
+        '422':
+          $ref: '#/components/responses/Error422'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthLoginResponse'
+      x-implementation-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+  /api/auth/logout:
+    post:
+      tags:
+      - Authentication
+      summary: Log out
+      operationId: planned_post_api_auth_logout
+      responses:
+        '422':
+          $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthMessageResponse'
+      x-implementation-status: planned
+      security:
+      - cookieAuth: []
+  /api/users/me:
+    get:
+      tags:
+      - Users
+      summary: Get my profile
+      operationId: planned_get_api_users_me
+      responses:
+        '422':
+          $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+      x-implementation-status: planned
+      security:
+      - cookieAuth: []
+    patch:
+      tags:
+      - Users
+      summary: Update my profile
+      operationId: planned_patch_api_users_me
+      responses:
+        '422':
+          $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+      x-implementation-status: planned
+      security:
+      - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdateRequest'
+    delete:
+      tags:
+      - Users
+      summary: Delete my account
+      operationId: planned_delete_api_users_me
+      responses:
+        '422':
+          $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '204':
+          description: Successful response
+      x-implementation-status: planned
+      security:
+      - cookieAuth: []
+  /api/listings/{id}:
+    patch:
+      tags:
+      - Listings
+      summary: Update listing
+      operationId: planned_patch_api_listings_id
+      responses:
+        '422':
+          $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingResponse'
+      x-implementation-status: planned
+      security:
+      - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingUpdateRequest'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    delete:
+      tags:
+      - Listings
+      summary: Delete listing
+      operationId: planned_delete_api_listings_id
+      responses:
+        '422':
+          $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '204':
+          description: Successful response
+      x-implementation-status: planned
+      security:
+      - cookieAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+  /api/listings/{id}/photos:
+    post:
+      tags:
+      - Listing Images
+      summary: Upload listing photo
+      operationId: planned_post_api_listings_id_photos
+      responses:
+        '422':
+          $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '201':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingImageResponse'
+      x-implementation-status: planned
+      security:
+      - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PhotoCreateRequest'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+  /api/listings/{id}/similar:
+    get:
+      tags:
+      - AI
+      summary: Find similar listings using AI
+      operationId: planned_get_api_listings_id_similar
+      responses:
+        '422':
+          $ref: '#/components/responses/Error422'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimilarListingListResponse'
+      x-implementation-status: planned
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+          default: 1
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 10
+  /api/search:
+    post:
+      tags:
+      - AI
+      summary: AI-assisted search
+      operationId: planned_post_api_search
+      responses:
+        '422':
+          $ref: '#/components/responses/Error422'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResultsResponse'
+      x-implementation-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+  /api/offers/{id}:
+    patch:
+      tags:
+      - Offers
+      summary: Respond to an offer
+      operationId: planned_patch_api_offers_id
+      responses:
+        '422':
+          $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferResponse'
+      x-implementation-status: planned
+      security:
+      - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfferUpdateRequest'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+  /api/orders:
+    post:
+      tags:
+      - Sales
+      summary: Complete a purchase
+      operationId: planned_post_api_orders
+      responses:
+        '422':
+          $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '201':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+      x-implementation-status: planned
+      security:
+      - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreateRequest'
+  /api/orders/mine:
+    get:
+      tags:
+      - Sales
+      summary: List my purchases
+      operationId: planned_get_api_orders_mine
+      responses:
+        '422':
+          $ref: '#/components/responses/Error422'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+      x-implementation-status: planned
+      security:
+      - cookieAuth: []
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+          default: 1
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 10
+components:
+  schemas:
+    CartItemListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/CartItemResponse'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+      type: object
+      required:
+      - items
+      - total
+      - page
+      - size
+      title: CartItemListResponse
+    CartItemResponse:
+      properties:
+        cart_item_id:
+          type: integer
+          title: Cart Item Id
+        user_id:
+          type: integer
+          title: User Id
+        listing_id:
+          type: integer
+          title: Listing Id
+      type: object
+      required:
+      - cart_item_id
+      - user_id
+      - listing_id
+      title: CartItemResponse
+    CategoryListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/CategoryResponse'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+      type: object
+      required:
+      - items
+      - total
+      - page
+      - size
+      title: CategoryListResponse
+    CategoryResponse:
+      properties:
+        category_id:
+          type: integer
+          title: Category Id
+        category_name:
+          type: string
+          title: Category Name
+      type: object
+      required:
+      - category_id
+      - category_name
+      title: CategoryResponse
+    FavouriteListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/FavouriteResponse'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+      type: object
+      required:
+      - items
+      - total
+      - page
+      - size
+      title: FavouriteListResponse
+    FavouriteResponse:
+      properties:
+        favourite_id:
+          type: integer
+          title: Favourite Id
+        user_id:
+          type: integer
+          title: User Id
+        listing_id:
+          type: integer
+          title: Listing Id
+      type: object
+      required:
+      - favourite_id
+      - user_id
+      - listing_id
+      title: FavouriteResponse
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    ListingImageListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ListingImageResponse'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+      type: object
+      required:
+      - items
+      - total
+      - page
+      - size
+      title: ListingImageListResponse
+    ListingImageResponse:
+      properties:
+        image_id:
+          type: integer
+          title: Image Id
+        listing_id:
+          type: integer
+          title: Listing Id
+        image_path:
+          type: string
+          title: Image Path
+        display_order:
+          type: integer
+          title: Display Order
+      type: object
+      required:
+      - image_id
+      - listing_id
+      - image_path
+      - display_order
+      title: ListingImageResponse
+    ListingListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ListingResponse'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+      type: object
+      required:
+      - items
+      - total
+      - page
+      - size
+      title: ListingListResponse
+    ListingResponse:
+      properties:
+        listing_id:
+          type: integer
+          title: Listing Id
+        seller_id:
+          type: integer
+          title: Seller Id
+        category_id:
+          type: integer
+          title: Category Id
+        title:
+          type: string
+          title: Title
+        description:
+          type: string
+          title: Description
+        price:
+          type: string
+          title: Price
+        item_condition:
+          type: string
+          title: Item Condition
+        brand:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Brand
+        color:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Color
+        status:
+          type: string
+          title: Status
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      type: object
+      required:
+      - listing_id
+      - seller_id
+      - category_id
+      - title
+      - description
+      - price
+      - item_condition
+      - brand
+      - color
+      - status
+      - created_at
+      - updated_at
+      title: ListingResponse
+    OfferListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/OfferResponse'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+      type: object
+      required:
+      - items
+      - total
+      - page
+      - size
+      title: OfferListResponse
+    OfferResponse:
+      properties:
+        offer_id:
+          type: integer
+          title: Offer Id
+        listing_id:
+          type: integer
+          title: Listing Id
+        buyer_id:
+          type: integer
+          title: Buyer Id
+        offered_price:
+          type: string
+          title: Offered Price
+        status:
+          type: string
+          title: Status
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - offer_id
+      - listing_id
+      - buyer_id
+      - offered_price
+      - status
+      - created_at
+      title: OfferResponse
+    SaleListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/SaleResponse'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+      type: object
+      required:
+      - items
+      - total
+      - page
+      - size
+      title: SaleListResponse
+    SaleResponse:
+      properties:
+        sale_id:
+          type: integer
+          title: Sale Id
+        offer_id:
+          type: integer
+          title: Offer Id
+        final_price:
+          type: string
+          title: Final Price
+        sold_at:
+          type: string
+          format: date-time
+          title: Sold At
+      type: object
+      required:
+      - sale_id
+      - offer_id
+      - final_price
+      - sold_at
+      title: SaleResponse
+    UserListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/UserResponse'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+      type: object
+      required:
+      - items
+      - total
+      - page
+      - size
+      title: UserListResponse
+    UserResponse:
+      properties:
+        user_id:
+          type: integer
+          title: User Id
+        f_name:
+          type: string
+          title: F Name
+        l_name:
+          type: string
+          title: L Name
+        gender:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Gender
+        email:
+          type: string
+          title: Email
+        phone_no:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone No
+        role:
+          type: string
+          title: Role
+        account_status:
+          type: string
+          title: Account Status
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        terms_accepted_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Terms Accepted At
+      type: object
+      required:
+      - user_id
+      - f_name
+      - l_name
+      - gender
+      - email
+      - phone_no
+      - role
+      - account_status
+      - created_at
+      - terms_accepted_at
+      title: UserResponse
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    Error:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: object
+          required:
+          - code
+          - message
+          - details
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              nullable: true
+    RegisterRequest:
+      type: object
+      properties:
+        f_name:
+          type: string
+        l_name:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        terms_accepted:
+          type: boolean
+      required:
+      - f_name
+      - l_name
+      - email
+      - password
+      - terms_accepted
+      additionalProperties: false
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+      - email
+      - password
+      additionalProperties: false
+    ListingCreateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        category_id:
+          type: integer
+          minimum: 1
+        price:
+          type: number
+          exclusiveMinimum: 0
+        item_condition:
+          type: string
+        brand:
+          type: string
+        color:
+          type: string
+      required:
+      - title
+      - description
+      - category_id
+      - price
+      - item_condition
+      additionalProperties: false
+    ListingUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        category_id:
+          type: integer
+          minimum: 1
+        price:
+          type: number
+          exclusiveMinimum: 0
+        item_condition:
+          type: string
+        brand:
+          type: string
+        color:
+          type: string
+      required: []
+      additionalProperties: false
+    ProfileUpdateRequest:
+      type: object
+      properties:
+        f_name:
+          type: string
+        l_name:
+          type: string
+        phone_no:
+          type: string
+      required: []
+      additionalProperties: false
+    PhotoCreateRequest:
+      type: object
+      properties:
+        image_path:
+          type: string
+        display_order:
+          type: integer
+          minimum: 1
+          maximum: 5
+      required:
+      - image_path
+      - display_order
+      additionalProperties: false
+    OfferCreateRequest:
+      type: object
+      properties:
+        listing_id:
+          type: integer
+          minimum: 1
+        offered_price:
+          type: number
+          exclusiveMinimum: 0
+      required:
+      - listing_id
+      - offered_price
+      additionalProperties: false
+    OfferUpdateRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - accepted
+          - rejected
+      required:
+      - status
+      additionalProperties: false
+    OrderCreateRequest:
+      type: object
+      properties:
+        offer_id:
+          type: integer
+          minimum: 1
+      required:
+      - offer_id
+      additionalProperties: false
+    SearchRequest:
+      type: object
+      properties:
+        query:
+          type: string
+          minLength: 1
+        page:
+          type: integer
+          minimum: 1
+        size:
+          type: integer
+          minimum: 1
+          maximum: 50
+      required:
+      - query
+      additionalProperties: false
+    AuthMessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+      - message
+    AuthLoginResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        user:
+          $ref: '#/components/schemas/UserResponse'
+      required:
+      - message
+      - user
+    SimilarListingListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ListingResponse'
+        page:
+          type: integer
+          minimum: 1
+        size:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+      required:
+      - items
+      - page
+      - size
+      - total
+    SearchResultsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ListingResponse'
+        page:
+          type: integer
+          minimum: 1
+        size:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+      required:
+      - items
+      - page
+      - size
+      - total
+    OrderResponse:
+      type: object
+      properties:
+        sale_id:
+          type: integer
+        offer_id:
+          type: integer
+        final_price:
+          type: number
+        sold_at:
+          type: string
+          format: date-time
+      required:
+      - sale_id
+      - offer_id
+      - final_price
+      - sold_at
+    OrderListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderResponse'
+        page:
+          type: integer
+          minimum: 1
+        size:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+      required:
+      - items
+      - page
+      - size
+      - total
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+  responses:
+    Error400:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error401:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error403:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error404:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error409:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error422:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
