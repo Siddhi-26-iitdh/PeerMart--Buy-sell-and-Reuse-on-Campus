@@ -1528,7 +1528,9 @@ components:
             message:
               type: string
             details:
-              nullable: true
+              type:
+                - object
+                - 'null'
     RegisterRequest:
       type: object
       properties:
