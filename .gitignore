@@ -30,3 +30,10 @@ frontend/*.tsbuildinfo
 
 # Temporary frontend backups
 frontend/src/app/routes.tsx.backup
+
+# Python test coverage reports
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.pytest_cache/
