@@ -6,7 +6,6 @@ from app.database import get_db
 from app.models.category import Category
 from app.schemas.category import CategoryListResponse, CategoryResponse
 
-
 router = APIRouter(prefix="/categories", tags=["Categories"])
 
 

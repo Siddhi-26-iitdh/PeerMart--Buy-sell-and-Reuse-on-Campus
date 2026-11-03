@@ -6,7 +6,6 @@ from app.database import get_db
 from app.models.favourite import Favourite
 from app.schemas.favourites import FavouriteListResponse, FavouriteResponse
 
-
 router = APIRouter(prefix="/favourites", tags=["Favourite"])
 
 

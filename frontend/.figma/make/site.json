@@ -1,0 +1,10 @@
+{
+  "description": "Connect with your campus community to buy and sell second-hand items easily, promoting affordability and sustainability among college students.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
