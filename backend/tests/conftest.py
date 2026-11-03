@@ -4,11 +4,10 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.database import Base, get_db
-from app.main import app
-
 # Import all models so SQLAlchemy knows about every table.
 from app import models  # noqa: F401
+from app.database import Base, get_db
+from app.main import app
 
 
 @pytest.fixture

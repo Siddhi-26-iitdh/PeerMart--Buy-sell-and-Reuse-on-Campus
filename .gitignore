@@ -37,3 +37,4 @@ frontend/src/app/routes.tsx.backup
 htmlcov/
 coverage.xml
 .pytest_cache/
+.github/workflows/backend-tests.yml.backup
