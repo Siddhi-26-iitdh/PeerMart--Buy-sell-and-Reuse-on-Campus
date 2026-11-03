@@ -21,3 +21,12 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Frontend dependencies and generated files
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.tsbuildinfo
+
+# Temporary frontend backups
+frontend/src/app/routes.tsx.backup
