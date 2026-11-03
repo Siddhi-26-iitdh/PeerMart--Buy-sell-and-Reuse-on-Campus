@@ -51,7 +51,7 @@ jobs:
         run: python -m ruff check app/ tests/ alembic/ seed.py
 
       - name: Apply MySQL database migrations
-        run: python -m alembic upgrade head
+        run: alembic upgrade head
 
       - name: Run tests and enforce coverage
         run: |
