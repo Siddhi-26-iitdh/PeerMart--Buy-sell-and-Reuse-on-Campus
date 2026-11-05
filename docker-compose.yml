@@ -33,5 +33,13 @@ services:
     ports:
       - "8000:8000"
 
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      - api
+    ports:
+      - "8444:80"
+
 volumes:
   peermart_mysql_data:

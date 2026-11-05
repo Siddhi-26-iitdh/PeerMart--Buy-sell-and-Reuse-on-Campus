@@ -630,6 +630,8 @@ function FilterBar({
 
 function BrowsePage() {
   const products = useProducts();
+  const [page, setPage] = useState(1);
+  const pageSize = 16;
   const [sort, setSort] = useState("Newest");
   const [category, setCategory] = useState("All categories");
   const [maximumPrice, setMaximumPrice] = useState("");
@@ -650,6 +652,13 @@ function BrowsePage() {
       return sort === "Price: low to high" ? firstPrice - secondPrice : secondPrice - firstPrice;
     });
 
+  const totalPages = Math.ceil(visibleProducts.length / pageSize);
+  const currentPage = Math.min(page, Math.max(totalPages, 1));
+  const paginatedProducts = visibleProducts.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
   return (
     <>
       <PageHero eyebrow="Campus marketplace" title="Find your next campus essential" copy="Search by product, category, price, or condition. Every listing is a unique item from a student seller." />
@@ -657,9 +666,28 @@ function BrowsePage() {
         <FilterBar category={category} maximumPrice={maximumPrice} condition={condition} onCategoryChange={setCategory} onMaximumPriceChange={setMaximumPrice} onConditionChange={setCondition} onSearch={() => setAppliedFilters({ category, maximumPrice, condition })} />
         <div className="results-head"><div><h2>Campus listings</h2><p>{visibleProducts.length} available {visibleProducts.length === 1 ? "item" : "items"}</p></div><label className="sort">Sort by <select value={sort} onChange={(e) => setSort(e.target.value)}><option>Newest</option><option>Price: low to high</option><option>Price: high to low</option></select></label></div>
         {visibleProducts.length > 0 ? (
-          <div className="product-grid">{visibleProducts.map((product) => <ProductCard product={product} key={product.id} />)}</div>
+          <div className="product-grid">{paginatedProducts.map((product) => <ProductCard product={product} key={product.id} />)}</div>
         ) : (
           <div className="empty-state soft"><span className="empty-icon"><Search /></span><h2>No matching items</h2><p>Try a different category, price, or condition.</p><Button onClick={() => { setCategory("All categories"); setMaximumPrice(""); setCondition("All conditions"); setAppliedFilters({ category: "All categories", maximumPrice: "", condition: "All conditions" }); }}>Clear filters</Button></div>
+        )}
+        {totalPages > 1 && (
+          <nav aria-label="Listing pagination" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 16, marginTop: 32 }}>
+            <button
+              className="btn btn-outline"
+              disabled={currentPage === 1}
+              onClick={() => setPage(currentPage - 1)}
+            >
+              Previous
+            </button>
+            <span>Page {currentPage} of {totalPages}</span>
+            <button
+              className="btn btn-outline"
+              disabled={currentPage === totalPages}
+              onClick={() => setPage(currentPage + 1)}
+            >
+              Next
+            </button>
+          </nav>
         )}
       </section>
     </>
