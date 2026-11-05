@@ -6,7 +6,6 @@ from app.database import get_db
 from app.models.offer import Offer
 from app.schemas.offers import OfferListResponse, OfferResponse
 
-
 router = APIRouter(prefix="/offers", tags=["Offer"])
 
 

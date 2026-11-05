@@ -8,7 +8,6 @@ from app.database import get_db
 from app.models.listing import Listing
 from app.schemas.listing import ListingListResponse, ListingResponse
 
-
 router = APIRouter(prefix="/listings", tags=["Listings"])
 
 
