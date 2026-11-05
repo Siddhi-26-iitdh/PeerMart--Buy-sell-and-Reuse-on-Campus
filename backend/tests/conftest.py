@@ -1,53 +1,102 @@
+import os
+from decimal import Decimal
+
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-# Import all models so SQLAlchemy knows about every table.
-from app import models  # noqa: F401
+import app.models  # noqa: F401
 from app.database import Base, get_db
-from app.main import app
+from app.main import app as fastapi_app
+from app.models.category import Category
+from app.models.listing import Listing
+from app.models.user import User
+
+TEST_DATABASE_URL = os.getenv(
+    "TEST_DATABASE_URL",
+    "mysql+pymysql://peermart:peermart@localhost:3306/peermart_test",
+)
+
+# Safety: never run tests against the production database.
+assert TEST_DATABASE_URL.split("?")[0].endswith("/peermart_test")
+
+test_engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
+TestSession = sessionmaker(bind=test_engine, autoflush=False)
+
+
+@pytest.fixture
+def client(request):
+    Base.metadata.drop_all(bind=test_engine)
+    Base.metadata.create_all(bind=test_engine)
+
+    db = TestSession()
+
+    try:
+        if request.module.__name__.endswith("test_api"):
+            seller = User(
+                f_name="Test",
+                l_name="Seller",
+                email="seller@test.local",
+                password_hash="test-only-hash",
+                role="student",
+                account_status="active",
+            )
+            books = Category(category_name="Books")
+            electronics = Category(category_name="Electronics")
+
+            db.add_all([seller, books, electronics])
+            db.flush()
+
+            db.add_all([
+                Listing(
+                    seller_id=seller.user_id,
+                    category_id=books.category_id,
+                    title="Engineering Textbook",
+                    description="Used textbook",
+                    price=Decimal("350.00"),
+                    item_condition="good",
+                    status="available",
+                ),
+                Listing(
+                    seller_id=seller.user_id,
+                    category_id=electronics.category_id,
+                    title="Scientific Calculator",
+                    description="Working calculator",
+                    price=Decimal("650.00"),
+                    item_condition="good",
+                    status="available",
+                ),
+                Listing(
+                    seller_id=seller.user_id,
+                    category_id=books.category_id,
+                    title="Physics Notes",
+                    description="Study notes",
+                    price=Decimal("150.00"),
+                    item_condition="new",
+                    status="available",
+                ),
+            ])
+            db.commit()
+
+        def override_db():
+            yield db
+
+        fastapi_app.dependency_overrides[get_db] = override_db
+
+        with TestClient(fastapi_app) as test_client:
+            yield test_client
+
+    finally:
+        fastapi_app.dependency_overrides.clear()
+        db.close()
 
 
 @pytest.fixture
 def db_session():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    @event.listens_for(engine, "connect")
-    def enable_foreign_keys(connection, connection_record):
-        cursor = connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
-    Base.metadata.create_all(bind=engine)
-
-    TestingSession = sessionmaker(
-        bind=engine,
-        autoflush=False,
-        autocommit=False,
-    )
-
-    with TestingSession() as session:
-        yield session
-
-    Base.metadata.drop_all(bind=engine)
-    engine.dispose()
-
-
-@pytest.fixture
-def client(db_session):
-    def override_get_db():
-        yield db_session
-
-    app.dependency_overrides[get_db] = override_get_db
-
+    """Provide a database session for existing API tests."""
+    session = TestSession()
     try:
-        with TestClient(app) as test_client:
-            yield test_client
+        yield session
     finally:
-        app.dependency_overrides.clear()
+        session.close()

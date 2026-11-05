@@ -38,3 +38,11 @@ htmlcov/
 coverage.xml
 .pytest_cache/
 .github/workflows/backend-tests.yml.backup
+
+# MS-4 Python test artifacts
+backend/.venv/
+backend/.coverage
+backend/htmlcov/
+backend/.pytest_cache/
+__pycache__/
+*.pyc
