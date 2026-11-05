@@ -26,57 +26,58 @@ TestSession = sessionmaker(bind=test_engine, autoflush=False)
 
 
 @pytest.fixture
-def client():
+def client(request):
     Base.metadata.drop_all(bind=test_engine)
     Base.metadata.create_all(bind=test_engine)
 
     db = TestSession()
 
     try:
-        seller = User(
-            f_name="Test",
-            l_name="Seller",
-            email="seller@test.local",
-            password_hash="test-only-hash",
-            role="student",
-            account_status="active",
-        )
-        books = Category(category_name="Books")
-        electronics = Category(category_name="Electronics")
+        if request.module.__name__.endswith("test_api"):
+            seller = User(
+                f_name="Test",
+                l_name="Seller",
+                email="seller@test.local",
+                password_hash="test-only-hash",
+                role="student",
+                account_status="active",
+            )
+            books = Category(category_name="Books")
+            electronics = Category(category_name="Electronics")
 
-        db.add_all([seller, books, electronics])
-        db.flush()
+            db.add_all([seller, books, electronics])
+            db.flush()
 
-        db.add_all([
-            Listing(
-                seller_id=seller.user_id,
-                category_id=books.category_id,
-                title="Engineering Textbook",
-                description="Used textbook",
-                price=Decimal("350.00"),
-                item_condition="good",
-                status="available",
-            ),
-            Listing(
-                seller_id=seller.user_id,
-                category_id=electronics.category_id,
-                title="Scientific Calculator",
-                description="Working calculator",
-                price=Decimal("650.00"),
-                item_condition="good",
-                status="available",
-            ),
-            Listing(
-                seller_id=seller.user_id,
-                category_id=books.category_id,
-                title="Physics Notes",
-                description="Study notes",
-                price=Decimal("150.00"),
-                item_condition="new",
-                status="available",
-            ),
-        ])
-        db.commit()
+            db.add_all([
+                Listing(
+                    seller_id=seller.user_id,
+                    category_id=books.category_id,
+                    title="Engineering Textbook",
+                    description="Used textbook",
+                    price=Decimal("350.00"),
+                    item_condition="good",
+                    status="available",
+                ),
+                Listing(
+                    seller_id=seller.user_id,
+                    category_id=electronics.category_id,
+                    title="Scientific Calculator",
+                    description="Working calculator",
+                    price=Decimal("650.00"),
+                    item_condition="good",
+                    status="available",
+                ),
+                Listing(
+                    seller_id=seller.user_id,
+                    category_id=books.category_id,
+                    title="Physics Notes",
+                    description="Study notes",
+                    price=Decimal("150.00"),
+                    item_condition="new",
+                    status="available",
+                ),
+            ])
+            db.commit()
 
         def override_db():
             yield db
@@ -89,3 +90,13 @@ def client():
     finally:
         fastapi_app.dependency_overrides.clear()
         db.close()
+
+
+@pytest.fixture
+def db_session():
+    """Provide a database session for existing API tests."""
+    session = TestSession()
+    try:
+        yield session
+    finally:
+        session.close()
