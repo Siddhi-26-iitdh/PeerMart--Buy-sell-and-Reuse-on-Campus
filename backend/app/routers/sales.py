@@ -6,7 +6,6 @@ from app.database import get_db
 from app.models.sale import Sale
 from app.schemas.sales import SaleListResponse, SaleResponse
 
-
 router = APIRouter(prefix="/sales", tags=["Sale"])
 
 

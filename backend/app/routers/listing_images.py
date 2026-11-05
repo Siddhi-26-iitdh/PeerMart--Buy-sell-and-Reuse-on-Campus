@@ -6,7 +6,6 @@ from app.database import get_db
 from app.models.listing_image import ListingImage
 from app.schemas.listing_images import ListingImageListResponse, ListingImageResponse
 
-
 router = APIRouter(prefix="/listing-images", tags=["ListingImage"])
 
 

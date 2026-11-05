@@ -6,7 +6,6 @@ from app.database import get_db
 from app.models.cart_item import CartItem
 from app.schemas.cart_items import CartItemListResponse, CartItemResponse
 
-
 router = APIRouter(prefix="/cart-items", tags=["CartItem"])
 
 
