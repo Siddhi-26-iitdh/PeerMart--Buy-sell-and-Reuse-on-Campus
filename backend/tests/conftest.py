@@ -6,13 +6,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+import app.models  # noqa: F401
 from app.database import Base, get_db
 from app.main import app as fastapi_app
-import app.models  # noqa: F401
 from app.models.category import Category
 from app.models.listing import Listing
 from app.models.user import User
-
 
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
