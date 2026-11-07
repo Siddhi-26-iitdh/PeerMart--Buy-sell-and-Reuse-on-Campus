@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -16,6 +16,7 @@ def list_listings(
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=100),
     category_id: int | None = Query(None, ge=1),
+    q: str | None = Query(None, max_length=200),
     min_price: Decimal | None = Query(None, ge=0),
     max_price: Decimal | None = Query(None, ge=0),
     item_condition: str | None = None,
@@ -29,6 +30,18 @@ def list_listings(
         )
 
     filters = []
+
+    if q is not None and q.strip():
+        term = q.strip().lower()
+        # Treat wildcard characters as literal text.
+        term = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{term}%"
+        filters.append(
+            or_(
+                Listing.title.ilike(pattern, escape="\\"),
+                Listing.description.ilike(pattern, escape="\\"),
+            )
+        )
 
     if category_id is not None:
         filters.append(Listing.category_id == category_id)
