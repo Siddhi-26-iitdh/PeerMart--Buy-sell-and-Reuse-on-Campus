@@ -113,3 +113,42 @@ def test_invalid_listing_page(client):
     response = client.get("/api/listings?page=0")
 
     assert response.status_code == 422
+
+
+def test_keyword_search_title_case_insensitive(client, db_session):
+    create_sample_listings(db_session)
+    response = client.get("/api/listings", params={"q": "bIcYcLe"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["items"][0]["title"] == "Mountain Bicycle"
+
+
+def test_keyword_search_description(client, db_session):
+    create_sample_listings(db_session)
+    response = client.get("/api/listings", params={"q": "programming"})
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert response.json()["items"][0]["title"] == "Python Textbook"
+
+
+def test_keyword_search_no_results(client, db_session):
+    create_sample_listings(db_session)
+    response = client.get("/api/listings", params={"q": "doesnotexist987"})
+    assert response.status_code == 200
+    assert response.json()["total"] == 0
+    assert response.json()["items"] == []
+
+
+def test_keyword_search_combined_with_price(client, db_session):
+    create_sample_listings(db_session)
+    response = client.get("/api/listings", params={"q": "bicycle", "max_price": 500})
+    assert response.status_code == 200
+    assert response.json()["total"] == 0
+
+
+def test_keyword_search_wildcards_are_literal(client, db_session):
+    create_sample_listings(db_session)
+    response = client.get("/api/listings", params={"q": "%"})
+    assert response.status_code == 200
+    assert response.json()["total"] == 0
