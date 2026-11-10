@@ -2,12 +2,18 @@
 
 import json
 import mimetypes
+import os
 from pathlib import Path
 
 from supabase import create_client
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-IMAGE_ROOT = Path("/mnt/d/PeerMart - Final Dataset/IMAGES")
+IMAGE_ROOT = Path(
+    os.getenv(
+        "PEERMART_IMAGE_ROOT",
+        "/mnt/d/PeerMart - Final Dataset/IMAGES",
+    )
+)
 MANIFEST_PATH = PROJECT_ROOT / "dataset" / "supabase_images_manifest.json"
 
 
