@@ -28,6 +28,7 @@ jobs:
     env:
       DATABASE_URL: mysql+pymysql://peermart:peermart@127.0.0.1:3306/peermart_test
       TEST_DATABASE_URL: mysql+pymysql://peermart:peermart@127.0.0.1:3306/peermart_test
+      PEERMART_SESSION_SECRET: ci-only-session-secret-for-peermart-backend-tests-2026
 
     defaults:
       run:
