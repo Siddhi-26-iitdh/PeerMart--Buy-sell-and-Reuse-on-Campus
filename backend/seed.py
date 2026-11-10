@@ -28,35 +28,6 @@ def get_or_create(db, model, lookup, **values):
     return record
 
 
-PRODUCTS = [
-    ("Engineering Mathematics Textbook", "Books", 350),
-    ("Scientific Calculator", "Electronics", 650),
-    ("Study Table Lamp", "Hostel Essentials", 400),
-    ("Secondhand Bicycle", "Cycles", 2500),
-    ("Wooden Study Chair", "Furniture", 900),
-    ("Python Programming Book", "Books", 300),
-    ("Wireless Mouse", "Electronics", 450),
-    ("Notebook Bundle", "Stationery", 180),
-    ("Electric Kettle", "Hostel Essentials", 700),
-    ("Desk Organizer", "Stationery", 150),
-    ("Data Structures Textbook", "Books", 420),
-    ("USB Keyboard", "Electronics", 500),
-    ("Hostel Mattress", "Hostel Essentials", 1200),
-    ("Mountain Bicycle", "Cycles", 3200),
-    ("Foldable Study Table", "Furniture", 1100),
-    ("Digital Electronics Book", "Books", 380),
-    ("Bluetooth Speaker", "Electronics", 800),
-    ("Geometry Instrument Box", "Stationery", 120),
-    ("Extension Board", "Hostel Essentials", 250),
-    ("Cycle Helmet", "Cycles", 550),
-    ("Plastic Storage Rack", "Furniture", 650),
-    ("Physics Reference Book", "Books", 280),
-    ("USB-C Charger", "Electronics", 600),
-    ("Whiteboard and Markers", "Stationery", 300),
-    ("Clothes Drying Stand", "Hostel Essentials", 750),
-]
-
-
 def seed():
     db = SessionLocal()
 
@@ -115,108 +86,8 @@ def seed():
         if not verify_password(password, admin.password_hash):
             admin.password_hash = hash_password(password)
 
-        categories = {}
-        for name in [
-            "Books",
-            "Electronics",
-            "Furniture",
-            "Cycles",
-            "Stationery",
-            "Hostel Essentials",
-        ]:
-            categories[name] = get_or_create(
-                db, Category, {"category_name": name}
-            )
-
-        listings = []
-
-        for index, (title, category_name, price) in enumerate(PRODUCTS):
-            seller = students[index % len(students)]
-            sold = index < 5
-
-            listing = get_or_create(
-                db,
-                Listing,
-                {
-                    "seller_id": seller.user_id,
-                    "title": title,
-                },
-                category_id=categories[category_name].category_id,
-                description=(
-                    f"Pre-owned {title.lower()}, suitable for "
-                    "IIT Dharwad campus students."
-                ),
-                price=Decimal(str(price)),
-                item_condition="good",
-                status="sold" if sold else "available",
-            )
-            listings.append(listing)
-
-            get_or_create(
-                db,
-                ListingImage,
-                {
-                    "listing_id": listing.listing_id,
-                    "display_order": 1,
-                },
-                image_path=(
-                    f"/images/placeholder/listing-{index + 1:02d}.jpg"
-                ),
-            )
-
-        for index in range(12):
-            listing = listings[index + 5]
-            buyer = students[(index + 8) % len(students)]
-
-            if buyer.user_id == listing.seller_id:
-                buyer = students[(index + 9) % len(students)]
-
-            get_or_create(
-                db,
-                CartItem,
-                {
-                    "user_id": buyer.user_id,
-                    "listing_id": listing.listing_id,
-                },
-            )
-
-            get_or_create(
-                db,
-                Favourite,
-                {
-                    "user_id": buyer.user_id,
-                    "listing_id": listing.listing_id,
-                },
-            )
-
-        for index in range(12):
-            listing = listings[index]
-            buyer = students[(index + 7) % len(students)]
-
-            if buyer.user_id == listing.seller_id:
-                buyer = students[(index + 8) % len(students)]
-
-            accepted = index < 5
-
-            offer = get_or_create(
-                db,
-                Offer,
-                {
-                    "listing_id": listing.listing_id,
-                    "buyer_id": buyer.user_id,
-                },
-                offered_price=listing.price - Decimal("50.00"),
-                status="accepted" if accepted else "pending",
-            )
-
-            if accepted:
-                get_or_create(
-                    db,
-                    Sale,
-                    {"offer_id": offer.offer_id},
-                    final_price=offer.offered_price,
-                )
-
+        # MS-5: Product data is managed by the finalized dataset importer.
+        # Do not recreate the old 25 listings or sample transactions.
         db.commit()
         print("PASS: PeerMart development dataset seeded")
 
