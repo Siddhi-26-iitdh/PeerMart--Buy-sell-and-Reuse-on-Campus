@@ -1,3 +1,5 @@
+import { getAdminUsers, getAdminCategories } from "./admin-api";
+import { getCurrentUser, login as apiLogin, logout as apiLogout, register as apiRegister } from "./auth-api";
 import { createContext, FormEvent, ReactNode, useContext, useEffect, useState } from "react";
 import { fetchProducts } from "./products-api";
 import {
@@ -204,11 +206,6 @@ const categoryImages: Record<string, string> = {
 const cartStorageKey = "peermart-cart-items";
 const favouriteStorageKey = "peermart-favourite-items";
 const negotiationStorageKey = "peermart-negotiation-items";
-const authStorageKey = "peermart-authenticated";
-const accountStorageKey = "peermart-account";
-const demoAccount = { email: "siddhi.avhad@iitdh.ac.in", password: "PeerMart@123" };
-const adminAuthStorageKey = "peermart-admin-authenticated";
-const adminAccount = { email: "admin@iitdh.ac.in", password: "PeerMartAdmin@123" };
 
 function readCartIds() {
   if (typeof window === "undefined") return [];
@@ -245,6 +242,7 @@ type CartContextValue = {
   favouriteIds: number[];
   negotiationIds: number[];
   isLoggedIn: boolean;
+  authLoading: boolean;
   addToCart: (id: number) => void;
   removeFromCart: (id: number) => void;
   toggleFavourite: (id: number) => void;
@@ -277,8 +275,12 @@ function useProtectedAction() {
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { isLoggedIn } = useCart();
+  const { isLoggedIn, authLoading } = useCart();
   const location = useLocation();
+
+  if (authLoading) {
+    return <p className="container">Checking your session...</p>;
+  }
 
   if (!isLoggedIn) {
     return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
@@ -417,7 +419,25 @@ function Layout() {
   const [cartIds, setCartIds] = useState<number[]>(readCartIds);
   const [favouriteIds, setFavouriteIds] = useState<number[]>(readFavouriteIds);
   const [negotiationIds, setNegotiationIds] = useState<number[]>(readNegotiationIds);
-  const [isLoggedIn, setIsLoggedIn] = useState(() => window.localStorage.getItem(authStorageKey) === "true");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    getCurrentUser()
+      .then(() => {
+        if (active) setIsLoggedIn(true);
+      })
+      .catch(() => {
+        if (active) setIsLoggedIn(false);
+      })
+      .finally(() => {
+        if (active) setAuthLoading(false);
+      });
+
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(cartStorageKey, JSON.stringify(cartIds));
@@ -431,15 +451,14 @@ function Layout() {
     window.localStorage.setItem(negotiationStorageKey, JSON.stringify(negotiationIds));
   }, [negotiationIds]);
 
-  useEffect(() => {
-    window.localStorage.setItem(authStorageKey, String(isLoggedIn));
-  }, [isLoggedIn]);
+
 
   const cart = {
     cartIds,
     favouriteIds,
     negotiationIds,
     isLoggedIn,
+    authLoading,
     addToCart: (id: number) => setCartIds((current) => current.includes(id) ? current : [...current, id]),
     removeFromCart: (id: number) => setCartIds((current) => current.filter((cartId) => cartId !== id)),
     toggleFavourite: (id: number) => setFavouriteIds((current) => current.includes(id) ? current.filter((favouriteId) => favouriteId !== id) : [...current, id]),
@@ -900,6 +919,10 @@ function ProductPage() {
 function AuthShell({ register = false }: { register?: boolean }) {
   const [show, setShow] = useState(false);
   const [accepted, setAccepted] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [gender, setGender] = useState("");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [reenteredPassword, setReenteredPassword] = useState("");
@@ -911,17 +934,11 @@ function AuthShell({ register = false }: { register?: boolean }) {
   const location = useLocation();
   const { setLoggedIn } = useCart();
   const returnTo = (location.state as { from?: string } | null)?.from ?? (register ? "/profile" : "/");
-  const submitAuth = (event: FormEvent) => {
+  const submitAuth = async (event: FormEvent) => {
     event.preventDefault();
     setAuthError("");
-    const normalizedEmail = email.trim().toLowerCase();
 
-    if (!register && normalizedEmail === adminAccount.email && password === adminAccount.password) {
-      window.localStorage.setItem(adminAuthStorageKey, "true");
-      setLoggedIn(false);
-      navigate("/admin");
-      return;
-    }
+    const normalizedEmail = email.trim().toLowerCase();
 
     if (!normalizedEmail.endsWith("@iitdh.ac.in")) {
       setAuthError("Use a valid IIT Dharwad email address ending in @iitdh.ac.in.");
@@ -933,39 +950,68 @@ function AuthShell({ register = false }: { register?: boolean }) {
         setAuthError("Password must contain at least 8 characters.");
         return;
       }
+
       if (password !== reenteredPassword) {
-        setAuthError("The passwords do not match. Please enter them again.");
+        setAuthError("The passwords do not match.");
         return;
       }
-      window.localStorage.setItem(accountStorageKey, JSON.stringify({ email: normalizedEmail, password }));
-      setLoggedIn(true);
-      navigate(returnTo, { replace: true });
+
+      if (!accepted) {
+        setAuthError("Please accept the Terms and Conditions.");
+        return;
+      }
+
+      try {
+        await apiRegister({
+          f_name: firstName.trim(),
+          l_name: lastName.trim(),
+          email: normalizedEmail,
+          password,
+          gender: gender || null,
+          phone_no: phone.trim() || null,
+          terms_accepted: accepted,
+        });
+
+        setLoggedIn(true);
+        navigate(returnTo, { replace: true });
+      } catch (error) {
+        setAuthError(
+          error instanceof Error
+            ? error.message
+            : "Registration failed. Please try again."
+        );
+      }
+
       return;
     }
 
-    const accounts = [demoAccount];
     try {
-      const storedAccount = window.localStorage.getItem(accountStorageKey);
-      if (storedAccount) accounts.push(JSON.parse(storedAccount) as typeof demoAccount);
-    } catch {}
+      const user = await apiLogin(normalizedEmail, password);
 
-    if (!accounts.some((account) => normalizedEmail === account.email && password === account.password)) {
-      setAuthError("The email or password is incorrect. Check your details and try again.");
-      return;
+      setLoggedIn(true);
+
+      if (user.role === "admin") {
+        navigate("/admin", { replace: true });
+      } else {
+        navigate(returnTo, { replace: true });
+      }
+    } catch (error) {
+      setAuthError(
+        error instanceof Error
+          ? error.message
+          : "Login failed. Please try again."
+      );
     }
-
-    setLoggedIn(true);
-    window.localStorage.removeItem(adminAuthStorageKey);
-    navigate(returnTo, { replace: true });
   };
+
   return (
     <section className="auth-page">
       <div className={register ? "auth-card auth-wide" : "auth-card"}>
         <Logo />
         <div className="auth-title"><h1>{register ? "Join your campus marketplace" : "Welcome to PeerMart"}</h1><p>{register ? "Create an account with your college email." : "Sign in to your campus marketplace account."}</p></div>
         <form onSubmit={submitAuth} className="form-stack">
-          {register && <div className="form-row"><label className="field"><span>First name</span><input required placeholder="Siddhi" /></label><label className="field"><span>Last name</span><input required placeholder="Avhad" /></label></div>}
-          {register && <div className="form-row"><label className="field"><span>Gender</span><div className="select-wrap"><select><option>Select</option><option>Female</option><option>Male</option><option>Prefer not to say</option></select><ChevronDown size={16} /></div></label><label className="field"><span>Phone number</span><input required placeholder="+91 98765 43210" /></label></div>}
+          {register && <div className="form-row"><label className="field"><span>First name</span><input required placeholder="First name" value={firstName} onChange={(event) => setFirstName(event.target.value)} /></label><label className="field"><span>Last name</span><input required placeholder="Last name" value={lastName} onChange={(event) => setLastName(event.target.value)} /></label></div>}
+          {register && <div className="form-row"><label className="field"><span>Gender</span><div className="select-wrap"><select value={gender} onChange={(event) => setGender(event.target.value)}><option value="">Select</option><option>Female</option><option>Male</option><option>Prefer not to say</option></select><ChevronDown size={16} /></div></label><label className="field"><span>Phone number</span><input required placeholder="+91 98765 43210" value={phone} onChange={(event) => setPhone(event.target.value)} /></label></div>}
           <label className="field"><span>College email ID</span><div className="input-icon"><Mail size={17} /><input required type="email" placeholder="name@iitdh.ac.in" value={email} onChange={(event) => setEmail(event.target.value)} /></div></label>
           <label className="field"><span>Password</span><div className="password-wrap"><input required minLength={8} type={show ? "text" : "password"} placeholder="At least 8 characters" value={password} onChange={(event) => setPassword(event.target.value)} /><button type="button" onClick={() => setShow(!show)}>{show ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>
           {register && <label className="field"><span>Re-enter password</span><input required minLength={8} type={show ? "text" : "password"} placeholder="Repeat password" value={reenteredPassword} onChange={(event) => setReenteredPassword(event.target.value)} /></label>}
@@ -974,7 +1020,7 @@ function AuthShell({ register = false }: { register?: boolean }) {
           {!register && <div className="form-helper"><label className="check-row"><input type="checkbox" /><span>Remember me</span></label><button type="button" onClick={() => { setResetSent(false); setForgotPassword(true); }}>Forgot password?</button></div>}
           <Button type="submit" className="full" disabled={register && !accepted}>{register ? "Create account" : "Sign in"}</Button>
         </form>
-        {!register && <div className="demo-credentials"><strong>Student demo</strong><span>Email: siddhi.avhad@iitdh.ac.in</span><span>Password: PeerMart@123</span><strong className="admin-demo-label">Administrator</strong><span>Email: admin@iitdh.ac.in</span><span>Password: PeerMartAdmin@123</span></div>}
+
         <p className="auth-switch">{register ? "Already have an account?" : "New to PeerMart?"} <Link to={register ? "/login" : "/register"} state={location.state}>{register ? "Sign in" : "Register"}</Link></p>
       </div>
       <div className="auth-aside"><div><Leaf size={28} /><h2>Good for your wallet.<br />Better for your campus.</h2><p>Join students finding useful things and giving great items a second life.</p></div></div>
@@ -1032,15 +1078,33 @@ function DashboardShell({ title, copy, children }: { title: string; copy: string
 function ProfilePage() {
   const navigate = useNavigate();
   const { setLoggedIn } = useCart();
+  const [currentUser, setCurrentUser] = useState<Awaited<ReturnType<typeof getCurrentUser>> | null>(null);
+
+  useEffect(() => {
+    getCurrentUser()
+      .then(setCurrentUser)
+      .catch(console.error);
+  }, []);
+
   const [editing, setEditing] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [saved, setSaved] = useState(false);
   const [profile, setProfile] = useState({
-    firstName: "Siddhi",
-    lastName: "Avhad",
-    phone: "+91 98765 43210",
+    firstName: "",
+    lastName: "",
+    phone: "",
   });
   const [draft, setDraft] = useState(profile);
+
+  useEffect(() => {
+    if (currentUser) {
+      setProfile({
+        firstName: currentUser.f_name,
+        lastName: currentUser.l_name,
+        phone: currentUser.phone_no ?? "",
+      });
+    }
+  }, [currentUser]);
 
   const openEditor = () => {
     setDraft(profile);
@@ -1065,7 +1129,7 @@ function ProfilePage() {
           <Button variant="outline" onClick={openEditor}>Edit profile</Button>
         </div>
         <div className="info-grid">
-          <div><span>College email</span><strong>siddhi.avhad@iitdh.ac.in</strong></div>
+          <div><span>College email</span><strong>{currentUser?.email ?? "Loading..."}</strong></div>
           <div><span>Phone number</span><strong>{profile.phone}</strong></div>
         </div>
       </div>
@@ -1088,7 +1152,7 @@ function ProfilePage() {
               <label className="field"><span>First name</span><input required value={draft.firstName} onChange={(event) => setDraft({ ...draft, firstName: event.target.value })} /></label>
               <label className="field"><span>Last name</span><input required value={draft.lastName} onChange={(event) => setDraft({ ...draft, lastName: event.target.value })} /></label>
             </div>
-            <label className="field"><span>College email</span><input value="siddhi.avhad@iitdh.ac.in" disabled /></label>
+            <label className="field"><span>College email</span><input value={currentUser?.email ?? ""} disabled /></label>
             <label className="field"><span>Phone number</span><input required type="tel" value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} /></label>
             <div className="modal-actions">
               <Button variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
@@ -1107,7 +1171,19 @@ function ProfilePage() {
             <p>You’ll need to sign in again to access your profile, orders, favourites, cart, and listings.</p>
             <div className="modal-actions">
               <Button variant="outline" onClick={() => setLoggingOut(false)}>Stay signed in</Button>
-              <Button variant="danger" onClick={() => { setLoggedIn(false); navigate("/login"); }}>Log out</Button>
+              <Button variant="danger" onClick={async () => {
+                try {
+                  await apiLogout();
+                  setLoggedIn(false);
+                  navigate("/login", { replace: true });
+                } catch (error) {
+                  window.alert(
+                    error instanceof Error
+                      ? error.message
+                      : "Logout failed. Please try again."
+                  );
+                }
+              }}>Log out</Button>
             </div>
           </div>
         </div>
@@ -1326,15 +1402,27 @@ function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
 
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
-    if (email.trim().toLowerCase() !== adminAccount.email || password !== adminAccount.password) {
-      setError("The administrator email or password is incorrect.");
-      return;
+
+    try {
+      const user = await apiLogin(email.trim().toLowerCase(), password);
+
+      if (user.role !== "admin") {
+        await apiLogout();
+        setError("Administrator access is required.");
+        return;
+      }
+
+      navigate("/admin", { replace: true });
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Administrator login failed."
+      );
     }
-    window.localStorage.setItem(adminAuthStorageKey, "true");
-    navigate("/admin");
   };
 
   return (
@@ -1343,12 +1431,12 @@ function AdminLoginPage() {
         <Logo />
         <div className="admin-login-title"><span>ADMINISTRATOR ACCESS</span><h1>PeerMart Admin</h1><p>Sign in to manage IIT DH users, listings, and categories.</p></div>
         <form className="form-stack" onSubmit={submit}>
-          <label className="field"><span>Administrator email</span><div className="input-icon"><Mail size={17} /><input required type="email" placeholder="admin@iitdh.ac.in" value={email} onChange={(event) => setEmail(event.target.value)} /></div></label>
+          <label className="field"><span>Administrator email</span><div className="input-icon"><Mail size={17} /><input required type="email" placeholder="testadmin63@iitdh.ac.in" value={email} onChange={(event) => setEmail(event.target.value)} /></div></label>
           <label className="field"><span>Password</span><div className="password-wrap"><input required type={showPassword ? "text" : "password"} placeholder="Enter admin password" value={password} onChange={(event) => setPassword(event.target.value)} /><button type="button" onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>
           {error && <div className="auth-error"><CircleHelp size={17} /><span>{error}</span></div>}
           <Button type="submit" className="full" icon={<ShieldCheck size={17} />}>Sign in to dashboard</Button>
         </form>
-        <div className="admin-security-note"><ShieldCheck size={17} /><p>Administrator access is separate from student accounts. This prototype stores the signed-in state in this browser only.</p></div>
+        <div className="admin-security-note"><ShieldCheck size={17} /><p>Administrator access is separate from student accounts. Administrator credentials are verified by the PeerMart backend.</p></div>
         <Link to="/" className="back-link"><ArrowLeft size={16} /> Return to PeerMart</Link>
       </div>
       <aside className="admin-login-aside"><div><LayoutDashboard size={34} /><h2>Keep the marketplace safe and useful.</h2><p>Manage users, product listings, and marketplace categories from one dashboard.</p></div></aside>
@@ -1357,9 +1445,37 @@ function AdminLoginPage() {
 }
 
 function ProtectedAdminPage() {
-  return window.localStorage.getItem(adminAuthStorageKey) === "true"
-    ? <AdminPage />
-    : <Navigate to="/login" replace />;
+  const [status, setStatus] = useState<
+    "checking" | "authorized" | "denied"
+  >("checking");
+
+  useEffect(() => {
+    let active = true;
+
+    getCurrentUser()
+      .then((user) => {
+        if (active) {
+          setStatus(user.role === "admin" ? "authorized" : "denied");
+        }
+      })
+      .catch(() => {
+        if (active) setStatus("denied");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (status === "checking") {
+    return <p className="container">Verifying administrator access...</p>;
+  }
+
+  if (status === "denied") {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <AdminPage />;
 }
 
 function AdminProductTable({
@@ -1393,15 +1509,69 @@ function AdminProductTable({
 function AdminPage() {
   const products = useProducts();
   const navigate = useNavigate();
+  const { setLoggedIn } = useCart();
   const [view, setView] = useState<"overview" | "users" | "listings" | "categories">("overview");
-  const [adminUsers, setAdminUsers] = useState([
-    { id: 1, name: "Siddhi Avhad", email: "siddhi.avhad@iitdh.ac.in", joined: "12 Aug 2025", status: "Active" },
-    { id: 2, name: "Isha Bhardwaj", email: "isha.bhardwaj@iitdh.ac.in", joined: "03 Sep 2025", status: "Active" },
-    { id: 3, name: "Radhemohan Yadav", email: "radhemohan.yadav@iitdh.ac.in", joined: "18 Sep 2025", status: "Active" },
-    { id: 4, name: "Ameya Ghadge", email: "ameya.ghadge@iitdh.ac.in", joined: "06 Oct 2025", status: "Active" },
-  ]);
+
+  const [adminUsers, setAdminUsers] = useState<
+    { id: number; name: string; email: string; joined: string; status: string }[]
+  >([]);
+
   const [adminListings, setAdminListings] = useState(products);
-  const [adminCategories, setAdminCategories] = useState(["Books", "Electronics", "Cycles", "Hostel Essentials", "Furniture", "Sports", "Calculators", "Other"]);
+
+  useEffect(() => {
+    setAdminListings(products);
+  }, [products]);
+
+  const [adminCategories, setAdminCategories] = useState<string[]>([]);
+  const [adminDataError, setAdminDataError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAdminData() {
+      try {
+        const [users, categories] = await Promise.all([
+          getAdminUsers(),
+          getAdminCategories(),
+        ]);
+
+        if (cancelled) return;
+
+        setAdminUsers(
+          users.map((user) => ({
+            id: user.user_id,
+            name: `${user.f_name} ${user.l_name}`,
+            email: user.email,
+            joined: new Date(user.created_at).toLocaleDateString("en-IN", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            }),
+            status: user.account_status,
+          }))
+        );
+
+        setAdminCategories(
+          categories.map((category) => category.category_name)
+        );
+
+        setAdminDataError(null);
+      } catch (error) {
+        if (!cancelled) {
+          setAdminDataError(
+            error instanceof Error ? error.message : "Unable to load admin data"
+          );
+        }
+      }
+    }
+
+    void loadAdminData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ type: "user" | "listing" | "category"; id: number | string; label: string } | null>(null);
@@ -1413,9 +1583,18 @@ function AdminPage() {
   const completedPurchases = selectedUser ? adminListings.filter((listing) => ((listing.id + 1) % 4) + 1 === selectedUser.id).slice(0, 2) : [];
   const soldItems = userListings.slice(-2);
 
-  const logoutAdmin = () => {
-    window.localStorage.removeItem(adminAuthStorageKey);
-    navigate("/login");
+  const logoutAdmin = async () => {
+    try {
+      await apiLogout();
+      setLoggedIn(false);
+      navigate("/login", { replace: true });
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Admin logout failed. Please try again."
+      );
+    }
   };
 
   const confirmDelete = () => {
@@ -1464,6 +1643,11 @@ function AdminPage() {
         <button className="admin-logout" onClick={logoutAdmin}><LogOut size={16} /> Log out</button>
       </aside>
       <main className="admin-main">
+        {adminDataError && (
+          <div role="alert" className="notice">
+            Failed to load admin data: {adminDataError}
+          </div>
+        )}
         <div className="admin-head"><div><span>ADMIN CONSOLE</span><h1>{activeHeading[0]}</h1><p>{activeHeading[1]}</p></div></div>
 
         {view === "overview" && (
