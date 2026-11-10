@@ -1,7 +1,5 @@
 """Repeat-safe development seed data for PeerMart."""
 
-import os
-from decimal import Decimal
 
 from sqlalchemy import select
 
@@ -14,8 +12,6 @@ from app.models.listing_image import ListingImage
 from app.models.offer import Offer
 from app.models.sale import Sale
 from app.models.user import User
-
-
 from app.passwords import demo_password, hash_password, verify_password
 
 
