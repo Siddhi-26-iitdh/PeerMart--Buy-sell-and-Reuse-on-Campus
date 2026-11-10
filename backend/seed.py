@@ -1,6 +1,5 @@
 """Repeat-safe development seed data for PeerMart."""
 
-import hashlib
 import os
 from decimal import Decimal
 
@@ -17,13 +16,7 @@ from app.models.sale import Sale
 from app.models.user import User
 
 
-def hash_password(password):
-    iterations = 600_000
-    salt = os.urandom(16)
-    digest = hashlib.pbkdf2_hmac(
-        "sha256", password.encode("utf-8"), salt, iterations
-    )
-    return f"pbkdf2_sha256${iterations}${salt.hex()}${digest.hex()}"
+from app.passwords import demo_password, hash_password, verify_password
 
 
 def get_or_create(db, model, lookup, **values):
@@ -77,22 +70,50 @@ def seed():
                 {"email": f"testuser{number:02d}@iitdh.ac.in"},
                 f_name=f"TestStudent{number:02d}",
                 l_name="PeerMart",
-                password_hash=hash_password("PeerMartDemo2026!"),
+                password_hash=hash_password(demo_password()),
                 role="student",
                 account_status="active",
             )
             students.append(student)
 
-        get_or_create(
-            db,
-            User,
-            {"email": "testadmin@iitdh.ac.in"},
-            f_name="Test",
-            l_name="Admin",
-            password_hash=hash_password("PeerMartDemo2026!"),
-            role="admin",
-            account_status="active",
+        # Admin is migrated below, before any new admin is created.
+
+        # Update existing seeded accounts without changing their IDs.
+        password = demo_password()
+
+        for student in students:
+            if not verify_password(password, student.password_hash):
+                student.password_hash = hash_password(password)
+
+        old_admin = db.scalar(
+            select(User).filter_by(email="testadmin@iitdh.ac.in")
         )
+        new_admin = db.scalar(
+            select(User).filter_by(email="testadmin63@iitdh.ac.in")
+        )
+
+        if old_admin is not None and new_admin is not None:
+            raise RuntimeError("Both admin emails already exist; resolve manually")
+
+        if old_admin is not None:
+            old_admin.email = "testadmin63@iitdh.ac.in"
+            admin = old_admin
+        elif new_admin is not None:
+            admin = new_admin
+        else:
+            admin = User(
+                email="testadmin63@iitdh.ac.in",
+                f_name="Test",
+                l_name="Admin",
+                password_hash=hash_password(password),
+                role="admin",
+                account_status="active",
+            )
+            db.add(admin)
+            db.flush()
+
+        if not verify_password(password, admin.password_hash):
+            admin.password_hash = hash_password(password)
 
         categories = {}
         for name in [
