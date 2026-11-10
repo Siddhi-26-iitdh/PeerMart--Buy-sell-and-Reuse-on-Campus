@@ -2,11 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.auth_dependencies import require_admin
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import UserListResponse, UserResponse
 
-router = APIRouter(prefix="/users", tags=["Users"])
+router = APIRouter(
+    prefix="/users",
+    tags=["Users"],
+    dependencies=[Depends(require_admin)],
+)
 
 
 @router.get("", response_model=UserListResponse)

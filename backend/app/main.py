@@ -1,8 +1,12 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.errors import http_error, validation_error
+from app.routers.auth import router as auth_router
 from app.routers.cart_items import router as cart_items_router
 from app.routers.categories import router as categories_router
 from app.routers.favourites import router as favourites_router
@@ -18,6 +22,20 @@ app = FastAPI(
     version="0.1.0",
 )
 
+session_secret = os.environ.get("PEERMART_SESSION_SECRET")
+if not session_secret or len(session_secret) < 32:
+    raise RuntimeError("PEERMART_SESSION_SECRET must contain at least 32 characters")
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=session_secret,
+    session_cookie="peermart_session",
+    max_age=60 * 60 * 8,
+    same_site="lax",
+    https_only=os.environ.get("PEERMART_COOKIE_SECURE", "false").lower() == "true",
+)
+
+app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(categories_router, prefix="/api")
 app.include_router(listings_router, prefix="/api")
