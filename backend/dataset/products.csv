@@ -1,0 +1,57 @@
+product_id,category_code,title,price,color,brand,item_condition,description
+CT01/P001,CT01,Discrete Mathematics & Its Applications,600.0,,engineering,used,Discrete Mathematics and Its Applications textbook in used condition.
+CT01/P002,CT01,A First Course in Probability,1000.0,,discrete mathematics,used,"A First Course in Probability textbook, 10th edition; pages reported in good condition."
+CT01/P003,CT01,JEE Books Physics Chemistry Maths,5000.0,,physics wallah,used,"set of chemistry , physics , and mathematics question modules of prayas batch"
+CT01/P004,CT01,Fluid Machenics Book,780.0,,physics wallah,new,"Fluid Mechanics textbook with unmarked pages, in used condition."
+CT01/P005,CT01,CAT exam book set,2000.0,,made easy,used,CAT exam preparation book set with unsolved practice material.
+CT01/P006,CT01,GATE cse book set,3450.0,,Unacedmy,used,Theory books and question modules of GATE cse
+CT01/P007,CT01,Pen stand,200.0,blue,Hauser,used,360-degree rotating pen stand for organizing stationery.
+CT01/P008,CT01,Autocad commands guide,600.0,,Autocad guide,used,handwritten guide of all autocad commands
+CT02/P001,CT02,Wireless Headphones,2000.0,Black,Boat,used,Boat wireless headphones with clear sound and comfortable fit.
+CT02/P002,CT02,Laptop Cover,600.0,Army Green,Air Case,used,Durable army green laptop cover for everyday protection.
+CT02/P003,CT02,Extension Board,450.0,Black,Portronics,used,Portronics extension board with multiple power sockets.
+CT02/P004,CT02,Wireless Mouse,550.0,Black,HP,used,HP wireless mouse with smooth and accurate tracking.
+CT02/P005,CT02,Smartwatch,990.0,Steel Gray,realme,used,Realme smartwatch with fitness tracking and smart features.
+CT02/P006,CT02,Electric kettle,1500.0,Steel Gray,bajaj,used,Bajaj electric kettle for quick water boiling.
+CT02/P007,CT02,Mobile charger,500.0,,Nokia,new,Nokia mobile charger for compatible devices; confirm charging specifications with the seller.
+CT02/P008,CT02,laptop stand,200.0,white,Potronics,new,New Portronics laptop stand for comfortable laptop use.
+CT03/P001,CT03,Laptop Bag,880.0,Navy Blue,Safari,used,Safari navy blue laptop bag for college and daily use.
+CT03/P002,CT03,College Backpack,650.0,Black,Wildcraft,used,Wildcraft black backpack for books and essentials.
+CT03/P003,CT03,Duffel Bag,750.0,Grey,American Tourister,used,American Tourister grey duffel bag for travel and storage.
+CT03/P004,CT03,Gym Bag,450.0,Black,Puma,used,Puma black gym bag for sports and fitness essentials.
+CT03/P005,CT03,Trolley Bag,2500.0,Blue,Skybags,used,Skybags blue trolley bag for convenient travel.
+CT03/P006,CT03,Hiking Backpack,700.0,Green,Quechua,used,Quechua green backpack for hiking and outdoor trips.
+CT04/P001,CT04,Scientific Calculator,450.0,Black,Casio,used,Casio scientific calculator for engineering and mathematical calculations.
+CT04/P002,CT04,Geometry Box,120.0,Blue,Camlin,used,Camlin geometry box with essential tools for drawing and measurements.
+CT04/P003,CT04,Notebook Set,180.0,Multicolor,Classmate,new,"Classmate notebooks for class notes, assignments, and daily study."
+CT04/P004,CT04,Desk Organizer,150.0,Black,Generic,used,Black desk organizer for storing pens and stationery items.
+CT04/P005,CT04,Drawing Board,350.0,Brown,Generic,used,Wooden drawing board for engineering drawings and design work.
+CT04/P006,CT04,Exam Writing Pad,100.0,Blue,Navneet,used,Navneet writing pad with a sturdy surface for exams and notes.
+CT05/P001,CT05,Yoga mat,500.0,Purple,BoldFit,used,"Comfortable, non-slip mat ideal for yoga, stretching, and exercise."
+CT05/P002,CT05,Racquet,700.0,Black,Silver,used,Lightweight racquet for recreational play; confirm sport and specifications with the seller.
+CT05/P003,CT05,Cricket Bat,1700.0,Generic,Ton,used,Cricket bat for practice and recreational play.
+CT05/P004,CT05,Football,900.0,Yellow,PlayBall,used,High-quality football designed for practice and recreational matches.
+CT05/P005,CT05,Badminton shoes,3000.0,Black,Adidas,new,Comfortable sports shoes offering grip and support for badminton.
+CT05/P006,CT05,Tennis shoes,2000.0,Red,Nike,used,"Durable tennis shoes providing stability, comfort, and court grip."
+CT06/P001,CT06,Steel Water Bottle,900.0,Gray,Cello,new,Durable stainless steel bottle designed to keep beverages fresh and easy to carry.
+CT06/P002,CT06,Digital desk clock,600.0,Blue,Erys,used,"Digital clock displaying accurate time with a clear, easy-to-read screen."
+CT07/P001,CT07,Bicycle,6000.0,Black,Octave,used,Bicycle for everyday travel; confirm frame size and mechanical condition with the seller.
+CT07/P002,CT07,Gear Bicycle,8000.0,Grey,Hero,used,Multi-speed bicycle designed for smooth riding on different terrains.
+CT07/P003,CT07,Bicycle,7000.0,Red,FireFox,used,Bicycle for everyday travel; confirm frame size and mechanical condition with the seller.
+CT07/P004,CT07,Bicycle with Gear,8000.0,Black,Hero,used,"Gear-equipped bicycle; confirm gear count, frame size and mechanical condition with the seller."
+CT07/P005,CT07,Bycycle paddles,200.0,Black,Hercules,new,Durable bicycle pedals designed for comfortable and efficient pedalling.
+CT07/P006,CT07,Cycling Helmet,600.0,Red,Strider,used,"Cycling helmet; check fit, impact history, condition and safety certification before use."
+CT07/P007,CT07,Cycle mudguard,200.0,Black,Hero,new,Protective accessory that prevents mud and water splashes while riding.
+CT07/P008,CT07,Cycle with basket,4000.0,Pink,Krdss,used,Convenient bicycle equipped with a basket for carrying everyday items.
+CT07/P009,CT07,Seat cover Bycycle,300.0,Black,Btwin,new,Comfortable seat cover designed to improve cushioning during cycling.
+CT07/P010,CT07,cycle bottle keeper,100.0,Black,Strider,used,Handy bottle holder that securely holds a water bottle on a bicycle.
+CT08/P001,CT08,Umbrella,700.0,Black,Proflifter,used,Durable black umbrella for protection from rain and sunlight.
+CT08/P002,CT08,Wall clock,500.0,white,Ajanta,used,Stylish white wall clock for home or hostel decoration.
+CT08/P003,CT08,Siitting stool,200.0,Brown,Nickola,used,Compact brown sitting stool for everyday use.
+CT08/P004,CT08,bedding,1000.0,White,Kaveri,used,White bedding for hostel or home use; confirm dimensions and fabric with the seller.
+CT08/P005,CT08,Folding bedding,2000.0,Grey,Springbed,used,Grey folding bedding for convenient storage; confirm dimensions and fabric with the seller.
+CT08/P006,CT08,Diwali Lights,200.0,Golden,Generic,new,Decorative golden Diwali lights for festive celebrations.
+CT08/P007,CT08,Light Panda,400.0,White,LumaGifts,new,Cute white panda-shaped light for room decoration.
+CT08/P008,CT08,Plants Artificial,100.0,White,generic,used,Artificial decorative plant for indoor spaces.
+CT08/P009,CT08,set of plants,200.0,green,Greenplanting,new,Set of decorative plants for room decor; confirm materials and dimensions with the seller.
+CT08/P010,CT08,Wall Pictures,300.0,multicolour,walldesign,used,Colourful wall pictures for decorating hostel rooms.

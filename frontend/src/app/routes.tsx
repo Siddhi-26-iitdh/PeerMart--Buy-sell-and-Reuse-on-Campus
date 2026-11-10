@@ -110,6 +110,7 @@ type Product = {
   condition: "New" | "Used";
   category: string;
   image: string;
+  images?: string[];
   status?: "Available" | "Reserved" | "Sold";
 };
 
@@ -287,14 +288,14 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 }
 
 const categories = [
-  ["Books & Study", "Notes, textbooks and guides", BookOpen, photos.books],
-  ["Electronics", "Gadgets that still have plenty to give", Zap, photos.headphones],
-  ["Cycles", "Your affordable campus commute", Bike, photos.cycle],
-  ["Hostel Essentials", "Everything for a smarter room", HomeIcon, photos.lamp],
-  ["Furniture", "Desks, chairs, shelves and more", Box, photos.shelf],
-  ["Sports Equipment", "Gear up without overspending", BadgeCheck, photos.sports],
-  ["Calculators", "Tools for every calculation", Bot, photos.calculator],
-  ["Other Items", "More useful campus finds", PackageCheck, photos.shelf],
+  ["Books & Study Materials", "Notes, textbooks and guides", BookOpen, photos.books],
+  ["Electronics & Gadgets", "Useful electronics and gadgets", Zap, photos.headphones],
+  ["Clothing & Fashion", "Affordable clothing and fashion", PackageCheck, photos.shelf],
+  ["Stationery & Academic Accessories", "Essential academic supplies", Bot, photos.calculator],
+  ["Sports & Fitness", "Gear up without overspending", BadgeCheck, photos.sports],
+  ["Daily Use & Hostel Essentials", "Everyday hostel essentials", HomeIcon, photos.lamp],
+  ["Cycles & Accessories", "Your affordable campus commute", Bike, photos.cycle],
+  ["Other", "More useful campus finds", Box, photos.shelf],
 ] as const;
 
 function Button({
@@ -563,7 +564,16 @@ function HomePage() {
         <SectionHeading eyebrow="Explore the campus" title="Browse by category" copy="Useful things, fair prices, and a shorter journey to find them." action={<Link to="/browse" className="text-link">View all categories <ArrowRight size={16} /></Link>} />
         <div className="category-grid">
           {categories.map(([title, copy, Icon, image]) => (
-            <Link to={`/category/${title.toLowerCase().split(" ")[0]}`} className="category-card" key={title}>
+            <Link to={`/category/${({
+  "Books & Study Materials": "books",
+  "Electronics & Gadgets": "electronics",
+  "Clothing & Fashion": "clothing",
+  "Stationery & Academic Accessories": "stationery",
+  "Sports & Fitness": "sports",
+  "Daily Use & Hostel Essentials": "hostel",
+  "Cycles & Accessories": "cycles",
+  "Other": "other",
+} as Record<string, string>)[title]}`} className="category-card" key={title}>
               <img src={image} alt="" />
               <div className="category-overlay" />
               <span className="category-icon"><Icon size={20} /></span>
@@ -764,13 +774,14 @@ function CategoryPage() {
   const products = useProducts();
   const { slug = "cycles" } = useParams();
   const categoryDetails: Record<string, { title: string; category: string; copy: string }> = {
-    books: { title: "Books & Study Materials", category: "Books", copy: "Find textbooks, notes, guides, and reference materials shared by IIT DH students." },
-    electronics: { title: "Electronics & Gadgets", category: "Electronics", copy: "Browse useful devices and gadgets that still have plenty to give." },
-    cycles: { title: "Cycles", category: "Cycles", copy: "Browse pre-loved cycles from students nearby—affordable, practical, and ready for another ride." },
-    hostel: { title: "Hostel Essentials", category: "Hostel Essentials", copy: "Make hostel life easier with practical items from students on campus." },
-    furniture: { title: "Furniture", category: "Furniture", copy: "Find desks, chairs, shelves, and other useful pieces for your room." },
-    sports: { title: "Sports Equipment", category: "Sports", copy: "Get active with affordable sports gear from fellow students." },
-    calculators: { title: "Calculators", category: "Calculators", copy: "Find scientific and engineering calculators for your coursework." },
+    books: { title: "Books & Study Materials", category: "Books & Study Materials", copy: "Find textbooks, notes, guides, and reference materials shared by IIT DH students." },
+    electronics: { title: "Electronics & Gadgets", category: "Electronics & Gadgets", copy: "Browse useful devices and gadgets that still have plenty to give." },
+    cycles: { title: "Cycles", category: "Cycles & Accessories", copy: "Browse pre-loved cycles from students nearby—affordable, practical, and ready for another ride." },
+    hostel: { title: "Hostel Essentials", category: "Daily Use & Hostel Essentials", copy: "Make hostel life easier with practical items from students on campus." },
+    clothing: { title: "Clothing & Fashion", category: "Clothing & Fashion", copy: "Explore clothing and fashion items from students." },
+    stationery: { title: "Stationery & Academic Accessories", category: "Stationery & Academic Accessories", copy: "Find stationery and academic accessories." },
+    sports: { title: "Sports Equipment", category: "Sports & Fitness", copy: "Get active with affordable sports gear from fellow students." },
+
     other: { title: "Other Items", category: "Other", copy: "Discover more useful campus finds that do not fit the usual categories." },
   };
   const details = categoryDetails[slug] ?? categoryDetails.cycles;
@@ -818,7 +829,11 @@ function ProductPage() {
   const products = useProducts();
   const { id } = useParams();
   const product = products.find((item) => item.id === Number(id)) ?? products[1];
-  const galleryImages = (objectGalleries[product.category] ?? [product.image, product.image, product.image]).map((src, index) => ({
+  const galleryImages = (
+    product.images?.length
+      ? product.images
+      : [product.image]
+  ).map((src, index) => ({
     src,
     alt: `${product.title} product view ${index + 1}`,
   }));
