@@ -9,9 +9,7 @@ from app.auth_dependencies import require_admin
 from app.database import get_db
 from app.models.listing import Listing
 from app.models.offer import Offer
-from app.models.sale import Sale
 from app.schemas.listing import ListingResponse
-
 
 router = APIRouter(
     prefix="/admin/listings",

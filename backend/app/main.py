@@ -1,5 +1,3 @@
-from app.routers.admin_activity import router as admin_activity_router
-from app.routers.admin_listings import router as admin_listings_router
 import os
 
 from fastapi import FastAPI
@@ -8,6 +6,8 @@ from starlette.exceptions import HTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.errors import http_error, validation_error
+from app.routers.admin_activity import router as admin_activity_router
+from app.routers.admin_listings import router as admin_listings_router
 from app.routers.auth import router as auth_router
 from app.routers.cart_items import router as cart_items_router
 from app.routers.categories import router as categories_router

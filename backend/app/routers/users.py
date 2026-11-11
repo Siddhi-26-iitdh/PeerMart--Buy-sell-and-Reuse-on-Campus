@@ -1,4 +1,7 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -68,9 +71,7 @@ def get_user(
 
     return user
 
-from typing import Literal
 
-from pydantic import BaseModel
 
 
 class UserStatusUpdate(BaseModel):
