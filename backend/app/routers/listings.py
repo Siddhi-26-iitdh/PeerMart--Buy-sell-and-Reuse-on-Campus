@@ -29,13 +29,8 @@ def list_listings(
             detail="min_price cannot exceed max_price",
         )
 
-    filters = [Listing.status == "available"]
-
-    if status is not None and status != "available":
-        raise HTTPException(
-            status_code=400,
-            detail="Only available listings are publicly accessible",
-        )
+    # Preserve existing status filtering while hiding admin-removed listings.
+    filters = [Listing.status != "removed"]
 
     if q is not None and q.strip():
         term = q.strip().lower()
@@ -95,7 +90,7 @@ def get_listing(
 ):
     listing = db.get(Listing, listing_id)
 
-    if listing is None or listing.status != "available":
+    if listing is None or listing.status == "removed":
         raise HTTPException(
             status_code=404,
             detail="Listing not found",
