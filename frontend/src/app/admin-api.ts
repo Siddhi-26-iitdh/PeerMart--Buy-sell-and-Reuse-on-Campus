@@ -63,3 +63,83 @@ export async function getAdminCategories(): Promise<AdminCategory[]> {
 
   return data.items;
 }
+
+export interface AdminActivityItem {
+  listing_id: number;
+  title: string;
+  price: number;
+  status: string;
+}
+
+export interface AdminActivityOffer {
+  offer_id: number;
+  listing_id: number;
+  title: string;
+  offered_price: number;
+  status: string;
+}
+
+export interface AdminActivitySale {
+  sale_id: number;
+  listing_id: number;
+  title: string;
+  final_price: number;
+  sold_at: string;
+}
+
+export interface AdminUserActivity {
+  user: {
+    user_id: number;
+    name: string;
+    email: string;
+    phone_no: string | null;
+    role: string;
+    account_status: string;
+  };
+  listings: AdminActivityItem[];
+  seller_negotiations: AdminActivityOffer[];
+  buyer_negotiations: AdminActivityOffer[];
+  completed_purchases: AdminActivitySale[];
+  sold_items: AdminActivitySale[];
+}
+
+export async function getAdminUserActivity(
+  userId: number
+): Promise<AdminUserActivity> {
+  return fetchAdminData<AdminUserActivity>(
+    `/api/admin/users/${userId}/activity`
+  );
+}
+
+export async function updateAdminUserStatus(
+  userId: number,
+  accountStatus: "active" | "inactive"
+): Promise<AdminUser> {
+  const response = await fetch(`/api/users/${userId}/status`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ account_status: accountStatus }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => null);
+    throw new Error(error?.detail || `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function updateAdminListingStatus(
+  listingId: number,
+  status: "available" | "removed"
+): Promise<void> {
+  const response = await fetch(`/api/admin/listings/${listingId}/status`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => null);
+    throw new Error(error?.detail || `HTTP ${response.status}`);
+  }
+}

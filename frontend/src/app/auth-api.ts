@@ -75,3 +75,15 @@ export function logout(): Promise<{ message: string }> {
     method: "POST",
   });
 }
+
+
+export function updateProfile(data: {
+  f_name: string;
+  l_name: string;
+  phone_no: string;
+}): Promise<AuthUser> {
+  return authRequest<AuthUser>("me", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
