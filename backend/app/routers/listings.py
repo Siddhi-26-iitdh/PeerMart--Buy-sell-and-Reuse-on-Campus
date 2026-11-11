@@ -29,7 +29,13 @@ def list_listings(
             detail="min_price cannot exceed max_price",
         )
 
-    filters = []
+    filters = [Listing.status == "available"]
+
+    if status is not None and status != "available":
+        raise HTTPException(
+            status_code=400,
+            detail="Only available listings are publicly accessible",
+        )
 
     if q is not None and q.strip():
         term = q.strip().lower()
@@ -89,7 +95,7 @@ def get_listing(
 ):
     listing = db.get(Listing, listing_id)
 
-    if listing is None:
+    if listing is None or listing.status != "available":
         raise HTTPException(
             status_code=404,
             detail="Listing not found",

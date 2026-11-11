@@ -67,3 +67,46 @@ def get_user(
         )
 
     return user
+
+from typing import Literal
+
+from pydantic import BaseModel
+
+
+class UserStatusUpdate(BaseModel):
+    account_status: Literal["active", "inactive"]
+
+
+@router.patch("/{user_id}/status", response_model=UserResponse)
+def update_user_status(
+    user_id: int,
+    payload: UserStatusUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    user = db.get(User, user_id)
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    if user.user_id == admin.user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You cannot change your own admin account status",
+        )
+
+    if user.role == "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin accounts cannot be modified through this endpoint",
+        )
+
+    user.account_status = payload.account_status
+
+    db.commit()
+    db.refresh(user)
+
+    return user

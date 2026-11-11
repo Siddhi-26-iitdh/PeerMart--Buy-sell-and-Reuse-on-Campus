@@ -1,5 +1,5 @@
-import { getAdminUsers, getAdminCategories } from "./admin-api";
-import { getCurrentUser, login as apiLogin, logout as apiLogout, register as apiRegister } from "./auth-api";
+import { getAdminUsers, getAdminCategories, getAdminUserActivity, updateAdminUserStatus, updateAdminListingStatus, type AdminUserActivity } from "./admin-api";
+import { updateProfile as apiUpdateProfile, getCurrentUser, login as apiLogin, logout as apiLogout, register as apiRegister } from "./auth-api";
 import { createContext, FormEvent, ReactNode, useContext, useEffect, useState } from "react";
 import { fetchProducts } from "./products-api";
 import {
@@ -1112,11 +1112,34 @@ function ProfilePage() {
     setEditing(true);
   };
 
-  const saveProfile = (event: FormEvent) => {
+  const saveProfile = async (event: FormEvent) => {
     event.preventDefault();
-    setProfile(draft);
-    setEditing(false);
-    setSaved(true);
+
+    if (!/^[6-9][0-9]{9}$/.test(draft.phone.trim())) {
+      window.alert("Enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.");
+      return;
+    }
+
+    try {
+      const updated = await apiUpdateProfile({
+        f_name: draft.firstName.trim(),
+        l_name: draft.lastName.trim(),
+        phone_no: draft.phone.trim(),
+      });
+
+      setCurrentUser(updated);
+      setProfile({
+        firstName: updated.f_name,
+        lastName: updated.l_name,
+        phone: updated.phone_no ?? "",
+      });
+      setEditing(false);
+      setSaved(true);
+    } catch (error) {
+      window.alert(
+        error instanceof Error ? error.message : "Profile update failed"
+      );
+    }
   };
 
   return (
@@ -1577,11 +1600,41 @@ function AdminPage() {
   const [deleteTarget, setDeleteTarget] = useState<{ type: "user" | "listing" | "category"; id: number | string; label: string } | null>(null);
   const selectedUser = adminUsers.find((user) => user.id === selectedUserId);
   const categoryListings = selectedCategory ? adminListings.filter((listing) => listing.category === selectedCategory) : [];
-  const userListings = selectedUser ? adminListings.filter((listing) => ((listing.id - 1) % 4) + 1 === selectedUser.id) : [];
-  const sellerNegotiations = userListings.slice(0, 2);
-  const buyerNegotiations = selectedUser ? adminListings.filter((listing) => (listing.id % 4) + 1 === selectedUser.id).slice(0, 2) : [];
-  const completedPurchases = selectedUser ? adminListings.filter((listing) => ((listing.id + 1) % 4) + 1 === selectedUser.id).slice(0, 2) : [];
-  const soldItems = userListings.slice(-2);
+  const [userActivity, setUserActivity] = useState<AdminUserActivity | null>(null);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedUserId === null) {
+      setUserActivity(null);
+      setActivityError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setUserActivity(null);
+    setActivityLoading(true);
+    setActivityError(null);
+
+    getAdminUserActivity(selectedUserId)
+      .then((data) => {
+        if (!cancelled) setUserActivity(data);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setActivityError(
+            error instanceof Error ? error.message : "Unable to load activity"
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setActivityLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedUserId]);
 
   const logoutAdmin = async () => {
     try {
@@ -1597,18 +1650,27 @@ function AdminPage() {
     }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteTarget) return;
-    if (deleteTarget.type === "user") {
-      setAdminUsers((current) => current.filter((user) => user.id !== deleteTarget.id));
-      if (selectedUserId === deleteTarget.id) setSelectedUserId(null);
+    try {
+      if (deleteTarget.type === "user") {
+        const id = Number(deleteTarget.id);
+        await updateAdminUserStatus(id, "inactive");
+        setAdminUsers(current => current.map(user =>
+          user.id === id ? { ...user, status: "inactive" } : user
+        ));
+      } else if (deleteTarget.type === "listing") {
+        const id = Number(deleteTarget.id);
+        await updateAdminListingStatus(id, "removed");
+        setAdminListings(current => current.filter(item => item.id !== id));
+      } else {
+        window.alert("Category deletion is not supported yet.");
+        return;
+      }
+      setDeleteTarget(null);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Admin action failed");
     }
-    if (deleteTarget.type === "listing") setAdminListings((current) => current.filter((listing) => listing.id !== deleteTarget.id));
-    if (deleteTarget.type === "category") {
-      setAdminCategories((current) => current.filter((category) => category !== deleteTarget.id));
-      if (selectedCategory === deleteTarget.id) setSelectedCategory(null);
-    }
-    setDeleteTarget(null);
   };
 
   const changeView = (nextView: "overview" | "users" | "listings" | "categories") => {
@@ -1665,7 +1727,22 @@ function AdminPage() {
         {view === "users" && !selectedUser && (
           <section className="admin-panel">
             <div className="panel-head"><div><h2>Registered users</h2><p>{adminUsers.length} active student accounts</p></div></div>
-            {adminUsers.length > 0 ? <table><thead><tr><th>User</th><th>College email</th><th>Registered</th><th>Status</th><th>Action</th></tr></thead><tbody>{adminUsers.map((user) => <tr key={user.id}><td><button className="table-user-link" onClick={() => setSelectedUserId(user.id)}>{user.name}</button></td><td>{user.email}</td><td>{user.joined}</td><td><StatusBadge>{user.status}</StatusBadge></td><td><div className="table-actions"><button className="table-view" onClick={() => setSelectedUserId(user.id)}>View activity</button><button className="table-delete" onClick={() => setDeleteTarget({ type: "user", id: user.id, label: user.name })}><Trash2 size={14} /> Delete account</button></div></td></tr>)}</tbody></table> : <div className="admin-empty">No user accounts remain.</div>}
+            {adminUsers.length > 0 ? <table><thead><tr><th>User</th><th>College email</th><th>Registered</th><th>Status</th><th>Action</th></tr></thead><tbody>{adminUsers.map((user) => <tr key={user.id}><td><button className="table-user-link" onClick={() => setSelectedUserId(user.id)}>{user.name}</button></td><td>{user.email}</td><td>{user.joined}</td><td><StatusBadge>{user.status}</StatusBadge></td><td><div className="table-actions"><button className="table-view" onClick={() => setSelectedUserId(user.id)}>View activity</button>{user.status === "active" ? (
+  <button className="table-delete" onClick={() => setDeleteTarget({ type: "user", id: user.id, label: user.name })}>
+    <Trash2 size={14} /> Deactivate
+  </button>
+) : (
+  <button className="table-view" onClick={async () => {
+    try {
+      await updateAdminUserStatus(user.id, "active");
+      setAdminUsers(current => current.map(item =>
+        item.id === user.id ? { ...item, status: "active" } : item
+      ));
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Reactivation failed");
+    }
+  }}>Reactivate</button>
+)}</div></td></tr>)}</tbody></table> : <div className="admin-empty">No user accounts remain.</div>}
           </section>
         )}
 
@@ -1675,11 +1752,80 @@ function AdminPage() {
             <section className="admin-panel user-summary-panel">
               <div className="panel-head"><div><h2>{selectedUser.name}</h2><p>{selectedUser.email} · Joined {selectedUser.joined}</p></div><StatusBadge>{selectedUser.status}</StatusBadge></div>
             </section>
-            <AdminProductTable title="All listings" copy="Every listing created by this user." items={userListings} status="Available" tone="green" />
-            <AdminProductTable title="Negotiation items as seller" copy="Listings where this user is negotiating with a buyer." items={sellerNegotiations} status="Negotiating" tone="amber" />
-            <AdminProductTable title="Negotiation items as buyer" copy="Offers this user has made on other sellers’ listings." items={buyerNegotiations} status="Negotiating" tone="amber" />
-            <AdminProductTable title="Completed purchases" copy="Items this user completed as a buyer." items={completedPurchases} status="Completed" tone="blue" />
-            <AdminProductTable title="Sold items" copy="Items this user completed as a seller." items={soldItems} status="Sold" tone="slate" />
+            {activityLoading && <div className="admin-panel">Loading real user activity...</div>}
+            {activityError && <div className="notice" role="alert">{activityError}</div>}
+            {userActivity && (
+              <>
+                <section className="admin-panel">
+                  <div className="panel-head">
+                    <div>
+                      <h2>Account details</h2>
+                      <p>Verified database information</p>
+                    </div>
+                  </div>
+                  <p>Phone: {userActivity.user.phone_no || "Not provided"}</p>
+                  <p>Role: {userActivity.user.role}</p>
+                  <p>Status: {userActivity.user.account_status}</p>
+                </section>
+                {([
+                  ["All listings", userActivity.listings.map(item => ({
+                    id: item.listing_id,
+                    title: item.title,
+                    amount: item.price,
+                    status: item.status,
+                  }))],
+                  ["Negotiations as seller", userActivity.seller_negotiations.map(item => ({
+                    id: item.offer_id,
+                    title: item.title,
+                    amount: item.offered_price,
+                    status: item.status,
+                  }))],
+                  ["Negotiations as buyer", userActivity.buyer_negotiations.map(item => ({
+                    id: item.offer_id,
+                    title: item.title,
+                    amount: item.offered_price,
+                    status: item.status,
+                  }))],
+                  ["Completed purchases", userActivity.completed_purchases.map(item => ({
+                    id: item.sale_id,
+                    title: item.title,
+                    amount: item.final_price,
+                    status: "Completed",
+                  }))],
+                  ["Sold items", userActivity.sold_items.map(item => ({
+                    id: item.sale_id,
+                    title: item.title,
+                    amount: item.final_price,
+                    status: "Sold",
+                  }))],
+                ] as const).map(([title, records]) => (
+                  <section className="admin-panel" key={title}>
+                    <div className="panel-head">
+                      <div><h2>{title}</h2><p>Actual records from MySQL</p></div>
+                      <strong className="panel-count">{records.length}</strong>
+                    </div>
+                    {records.length === 0 ? (
+                      <div className="admin-empty">No records found.</div>
+                    ) : (
+                      <table>
+                        <thead>
+                          <tr><th>Item</th><th>Amount</th><th>Status</th></tr>
+                        </thead>
+                        <tbody>
+                          {records.map(item => (
+                            <tr key={item.id}>
+                              <td>{item.title}</td>
+                              <td>₹{item.amount.toLocaleString("en-IN")}</td>
+                              <td><StatusBadge>{item.status}</StatusBadge></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </section>
+                ))}
+              </>
+            )}
           </div>
         )}
 
@@ -1693,7 +1839,7 @@ function AdminPage() {
         {view === "categories" && !selectedCategory && (
           <section className="admin-panel category-admin-panel">
             <div className="panel-head"><div><h2>Marketplace categories</h2><p>{adminCategories.length} active categories</p></div></div>
-            <div className="admin-category-grid">{adminCategories.map((category) => <div className="admin-category-card" key={category}><button className="admin-category-open" onClick={() => setSelectedCategory(category)}><span><Tag size={18} /></span><div><strong>{category}</strong><p>{adminListings.filter((listing) => listing.category === category).length} listings</p></div></button><button onClick={() => setDeleteTarget({ type: "category", id: category, label: category })} aria-label={`Delete ${category}`}><Trash2 size={16} /></button></div>)}</div>
+            <div className="admin-category-grid">{adminCategories.map((category) => <div className="admin-category-card" key={category}><button className="admin-category-open" onClick={() => setSelectedCategory(category)}><span><Tag size={18} /></span><div><strong>{category}</strong><p>{adminListings.filter((listing) => listing.category === category).length} listings</p></div></button></div>)}</div>
             {adminCategories.length === 0 && <div className="admin-empty">No marketplace categories remain.</div>}
           </section>
         )}
@@ -1711,10 +1857,10 @@ function AdminPage() {
           <div className="modal">
             <button className="modal-close" onClick={() => setDeleteTarget(null)}><X /></button>
             <span className="modal-icon logout-icon"><Trash2 /></span>
-            <h2>Delete {deleteTarget.type === "user" ? "account" : deleteTarget.type === "listing" ? "product" : "category"}?</h2>
-            <p><strong>{deleteTarget.label}</strong> will be removed from the admin interface. This destructive action requires explicit confirmation.</p>
+            <h2>{deleteTarget.type === "user" ? "Deactivate account?" : deleteTarget.type === "listing" ? "Remove listing?" : "Delete category?"}</h2>
+            <p><strong>{deleteTarget.label}</strong> will be updated in MySQL. The record will be preserved.</p>
             {deleteTarget.type === "category" && <div className="notice"><CircleHelp size={18} /><span>Deleting a category does not automatically delete its existing product listings.</span></div>}
-            <div className="modal-actions"><Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button><Button variant="danger" onClick={confirmDelete}>Confirm deletion</Button></div>
+            <div className="modal-actions"><Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button><Button variant="danger" onClick={confirmDelete}>Confirm action</Button></div>
           </div>
         </div>
       )}

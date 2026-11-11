@@ -1,3 +1,5 @@
+from app.routers.admin_activity import router as admin_activity_router
+from app.routers.admin_listings import router as admin_listings_router
 import os
 
 from fastapi import FastAPI
@@ -37,6 +39,8 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
+app.include_router(admin_activity_router, prefix="/api")
+app.include_router(admin_listings_router, prefix="/api")
 app.include_router(categories_router, prefix="/api")
 app.include_router(listings_router, prefix="/api")
 
