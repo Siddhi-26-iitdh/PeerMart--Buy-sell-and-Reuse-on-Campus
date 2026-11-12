@@ -1,3 +1,4 @@
+import { runAiSearch, type AISearchResponse } from "./ai-search-api";
 import { getAdminUsers, getAdminCategories, getAdminUserActivity, updateAdminUserStatus, updateAdminListingStatus, type AdminUserActivity } from "./admin-api";
 import { updateProfile as apiUpdateProfile, getCurrentUser, login as apiLogin, logout as apiLogout, register as apiRegister } from "./auth-api";
 import { createContext, FormEvent, ReactNode, useContext, useEffect, useState } from "react";
@@ -728,33 +729,78 @@ function AISearchPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const query = new URLSearchParams(location.search).get("q")?.trim() ?? "";
-  const normalizedQuery = query.toLowerCase();
-  const categoryAliases: Array<[string, string[]]> = [
-    ["Books", ["book", "textbook", "notes", "study guide"]],
-    ["Cycles", ["cycle", "bike", "cycle"]],
-    ["Calculators", ["calculator"]],
-    ["Hostel Essentials", ["lamp", "hostel", "kettle", "fan", "extension board"]],
-    ["Electronics", ["electronic", "headphone", "earphone", "speaker", "mouse", "keyboard", "power bank", "usb"]],
-    ["Furniture", ["furniture", "shelf", "table", "chair", "cabinet", "rack"]],
-    ["Sports", ["sport", "badminton", "racquet", "cricket", "football", "basketball", "yoga"]],
-  ];
-  const matchedCategory = categoryAliases.find(([, aliases]) => aliases.some((alias) => normalizedQuery.includes(alias)))?.[0];
-  const matchedCondition = normalizedQuery.includes("used") ? "Used" : normalizedQuery.includes("new") ? "New" : undefined;
-  const budgetMatch = normalizedQuery.match(/(?:under|below|up to|maximum|max|₹)\s*₹?\s*([\d,]+)/);
-  const maximumPrice = budgetMatch ? Number(budgetMatch[1].replace(/,/g, "")) : undefined;
-  const matchedProducts = query
-    ? products.filter((product) => {
-        const numericPrice = Number(product.price.replace(/[₹,]/g, ""));
-        const matchesCategory = !matchedCategory || product.category === matchedCategory;
-        const matchesCondition = !matchedCondition || product.condition === matchedCondition;
-        const matchesPrice = !maximumPrice || numericPrice <= maximumPrice;
-        const searchableText = `${product.title} ${product.category}`.toLowerCase();
-        const meaningfulTerms = normalizedQuery.split(/\s+/).filter((term) => term.length > 2 && !["used", "new", "under", "below", "maximum", "with", "for", "the"].includes(term) && !/^[₹\d,]+$/.test(term));
-        const matchesTerms = Boolean(matchedCategory) || meaningfulTerms.length === 0 || meaningfulTerms.some((term) => searchableText.includes(term));
-        return matchesCategory && matchesCondition && matchesPrice && matchesTerms;
+
+  const [aiResult, setAiResult] = useState<AISearchResponse | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!query) {
+      setAiResult(null);
+      setAiError(null);
+      setAiLoading(false);
+      return;
+    }
+
+    let active = true;
+    setAiLoading(true);
+    setAiError(null);
+
+    runAiSearch(query)
+      .then((res) => {
+        if (active) setAiResult(res);
       })
-    : [];
-  const runSearch = (searchQuery: string) => navigate(`/ai-search?q=${encodeURIComponent(searchQuery)}`);
+      .catch((err) => {
+        if (active) {
+          setAiResult(null);
+          setAiError(err instanceof Error ? err.message : "AI search failed");
+        }
+      })
+      .finally(() => {
+        if (active) setAiLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [query]);
+
+  const productsById = new Map(products.map((item) => [item.id, item]));
+  const matchedProducts: Product[] = (aiResult?.items ?? []).map((item) => {
+    const existing = productsById.get(item.listing_id);
+    if (existing) return existing;
+    const cond = item.item_condition.toLowerCase() === "new" ? "New" : "Used";
+    const status =
+      item.status.toLowerCase() === "sold"
+        ? "Sold"
+        : item.status.toLowerCase() === "reserved"
+          ? "Reserved"
+          : "Available";
+    return {
+      id: item.listing_id,
+      title: item.title,
+      description: item.description,
+      price: `₹${Number(item.price).toLocaleString("en-IN")}`,
+      condition: cond,
+      category: aiResult?.interpreted_filters.category ?? "Other",
+      image: categoryImages["Other"] ?? photos.shelf,
+      status,
+      createdAt: item.created_at,
+    };
+  });
+
+  const filters = aiResult?.interpreted_filters;
+  const budgetText =
+    filters?.min_price && filters?.max_price
+      ? `₹${Number(filters.min_price).toLocaleString("en-IN")} – ₹${Number(filters.max_price).toLocaleString("en-IN")}`
+      : filters?.max_price
+        ? `up to ₹${Number(filters.max_price).toLocaleString("en-IN")}`
+        : filters?.min_price
+          ? `from ₹${Number(filters.min_price).toLocaleString("en-IN")}`
+          : "Any price";
+
+  const runSearch = (searchQuery: string) =>
+    navigate(`/ai-search?q=${encodeURIComponent(searchQuery)}`);
 
   return (
     <>
@@ -765,22 +811,57 @@ function AISearchPage() {
           <p>Skip the filters. Tell PeerMart what you’re looking for in ordinary words and we’ll find the closest campus matches.</p>
           <SearchBox large initialQuery={query} onSearch={runSearch} />
           <div className="query-chips">
-            {["Used textbooks under ₹500", "A cycle below ₹3,000", "Calculator for engineering", "A lamp for my hostel"].map((chip) => <button onClick={() => runSearch(chip)} key={chip}>{chip}</button>)}
+            {["Used textbooks under ₹500", "A cycle below ₹3,000", "Calculator for engineering", "A lamp for my hostel"].map((chip) => (
+              <button onClick={() => runSearch(chip)} key={chip}>{chip}</button>
+            ))}
           </div>
           <Link to="/browse" className="manual-link">Prefer manual filters? <strong>Use conventional search</strong></Link>
         </div>
       </section>
       <section className="container content-section">
         {query ? (
-          <>
-            <div className="ai-interpret"><Bot size={22} /><div><strong>We understood:</strong><span>Product: {matchedCategory ?? "Any category"}</span><span>Budget: {maximumPrice ? `up to ₹${maximumPrice.toLocaleString("en-IN")}` : "Any price"}</span><span>Condition: {matchedCondition ?? "Any"}</span></div></div>
-            <div className="results-head"><div><h2>Best matches for you</h2><p>{matchedProducts.length} {matchedProducts.length === 1 ? "listing matches" : "listings match"} “{query}”</p></div></div>
-            {matchedProducts.length > 0 ? (
-              <div className="product-grid">{matchedProducts.map((product) => <ProductCard product={product} key={product.id} />)}</div>
-            ) : (
-              <div className="empty-state soft"><span className="empty-icon"><Search /></span><h2>No close matches found</h2><p>Try fewer words, a higher budget, or continue with manual filters.</p><Link to="/browse" className="btn btn-primary">Go to conventional search</Link></div>
-            )}
-          </>
+          aiLoading ? (
+            <div className="empty-state soft">
+              <span className="empty-icon"><Sparkles /></span>
+              <h2>Interpreting your search...</h2>
+              <p>Matching your request against live campus listings.</p>
+            </div>
+          ) : aiError ? (
+            <div className="notice" role="alert">
+              <CircleHelp size={18} />
+              <span>{aiError}</span>
+            </div>
+          ) : aiResult ? (
+            <>
+              <div className="ai-interpret">
+                <Bot size={22} />
+                <div>
+                  <strong>We understood:</strong>
+                  <span>Category: {filters?.category ?? "Any category"}</span>
+                  <span>Budget: {budgetText}</span>
+                  <span>Condition: {filters?.condition ? (filters.condition === "new" ? "New" : "Used") : "Any"}</span>
+                  {filters?.keywords?.length ? <span>Keywords: {filters.keywords.join(", ")}</span> : null}
+                </div>
+              </div>
+              {aiResult.fallback_used && aiResult.fallback_reason && (
+                <div className="notice" style={{ marginBottom: 20 }}>
+                  <CircleHelp size={18} />
+                  <span>{aiResult.fallback_reason}</span>
+                </div>
+              )}
+              <div className="results-head">
+                <div>
+                  <h2>Best matches for you</h2>
+                  <p>{matchedProducts.length} {matchedProducts.length === 1 ? "listing matches" : "listings match"} “{query}”</p>
+                </div>
+              </div>
+              {matchedProducts.length > 0 ? (
+                <div className="product-grid">{matchedProducts.map((product) => <ProductCard product={product} key={product.id} />)}</div>
+              ) : (
+                <div className="empty-state soft"><span className="empty-icon"><Search /></span><h2>No close matches found</h2><p>Try fewer words, a higher budget, or continue with manual filters.</p><Link to="/browse" className="btn btn-primary">Go to conventional search</Link></div>
+              )}
+            </>
+          ) : null
         ) : (
           <div className="empty-state soft"><span className="empty-icon"><Sparkles /></span><h2>Your matches will appear here</h2><p>Try a complete thought like “used textbooks under ₹500” for better results.</p></div>
         )}

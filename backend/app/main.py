@@ -8,6 +8,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.errors import http_error, validation_error
 from app.routers.admin_activity import router as admin_activity_router
 from app.routers.admin_listings import router as admin_listings_router
+from app.routers.ai_search import router as ai_search_router
 from app.routers.auth import router as auth_router
 from app.routers.cart_items import router as cart_items_router
 from app.routers.categories import router as categories_router
@@ -43,6 +44,7 @@ app.include_router(admin_activity_router, prefix="/api")
 app.include_router(admin_listings_router, prefix="/api")
 app.include_router(categories_router, prefix="/api")
 app.include_router(listings_router, prefix="/api")
+app.include_router(ai_search_router, prefix="/api")
 
 
 @app.get("/health", tags=["Health"])
