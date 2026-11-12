@@ -26,6 +26,7 @@ services:
       PEERMART_DEMO_PASSWORD: ${PEERMART_DEMO_PASSWORD:?Demo password missing from .env}
       PEERMART_SESSION_SECRET: ${PEERMART_SESSION_SECRET:?Session secret missing from .env}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
