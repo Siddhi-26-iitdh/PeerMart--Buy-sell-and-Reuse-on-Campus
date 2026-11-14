@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from app.services.ai_search_service import (
-    _fallback_extract_filters,
+    fallback_extract_filters,
     query_cache,
     rate_limiter,
 )
@@ -60,19 +60,9 @@ def test_ai_search_50_eval_queries(client, group, case):
 
 def test_ai_search_genuine_accuracy_at_least_90_percent():
     """Req 21: Genuine query category/filter extraction accuracy must be >= 90%."""
-    categories = [
-        "Cycles & Accessories",
-        "Books & Study Materials",
-        "Electronics & Gadgets",
-        "Hostel & Room Essentials",
-        "Sports & Fitness Gear",
-        "Stationery & Lab Equipment",
-        "Clothing & Campus Merch",
-        "Miscellaneous",
-    ]
     matched = 0
     for item in EVAL_DATA["genuine"]:
-        filters = _fallback_extract_filters(item["query"], categories)
+        filters = fallback_extract_filters(item["query"])
         expected_cat = item.get("expected_category")
         if expected_cat is None or filters.category == expected_cat:
             matched += 1
