@@ -1,5 +1,5 @@
-from decimal import Decimal
 import io
+from decimal import Decimal
 
 from fastapi.testclient import TestClient
 
@@ -149,7 +149,7 @@ def test_simultaneous_multi_user_sessions_and_negotiation_to_receipt(client, db_
             json={"listing_id": listing_id, "offered_price": "480.00"},
         )
         assert competing_res.status_code == 201
-        competing_id = competing_res.json()["offer_id"]
+        assert competing_res.json()["offer_id"] is not None
 
         # 3 & 4. Buyer views sent offer; Seller views received offers
         sent_list = buyer_client.get("/api/offers/sent").json()
@@ -403,6 +403,7 @@ def test_56_listings_and_122_supabase_images_dataset_preserved():
     """Task O (item 16): Verify finalized 56-listing and 122-Supabase-image dataset files are intact."""
     import json
     from pathlib import Path
+
     from import_final_dataset import load_products
 
     products = load_products()
