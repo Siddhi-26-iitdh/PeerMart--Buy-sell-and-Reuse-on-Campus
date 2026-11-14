@@ -226,6 +226,14 @@ def test_simultaneous_multi_user_sessions_and_negotiation_to_receipt(client, db_
         assert outsider_pay.status_code == 403
 
         # Buyer simulates Successful Payment -> creates Sale, marks offer completed, marks listing sold, and rejects competing offers
+        # Failed payment resets the offer to pending.
+        # Seller must accept it again before payment can succeed.
+        retry_accept = seller_client.patch(
+            f"/api/offers/{offer_id}",
+            json={"status": "accepted"},
+        )
+        assert retry_accept.status_code == 200
+
         success_pay = buyer_client.post(
             "/api/payments/mock",
             json={"offer_id": offer_id, "outcome": "success"},
@@ -359,6 +367,7 @@ def test_registration_approval_and_deactivation_request_workflows(client, db_ses
                 "password": "NewStudentPass123!",
                 "phone_no": "9123456789",
                 "gender": "Female",
+                "terms_accepted": True,
             },
         )
         assert reg_res.status_code == 201
@@ -395,7 +404,7 @@ def test_registration_approval_and_deactivation_request_workflows(client, db_ses
         # 3. Admin approves registration -> student can now log in
         approve_res = admin_client.patch(
             f"/api/admin/registrations/{new_user_id}",
-            json={"decision": "approved", "admin_note": "Verified IITDh ID"},
+            json={"action": "approve", "admin_comment": "Verified IITDh ID"},
         )
         assert approve_res.status_code == 200
         assert approve_res.json()["status"] == "approved"
@@ -435,11 +444,11 @@ def test_registration_approval_and_deactivation_request_workflows(client, db_ses
         adm_deacts = admin_client.get("/api/admin/deactivation-requests?status=pending")
         assert adm_deacts.status_code == 200
         req_item = next(r for r in adm_deacts.json()["items"] if r["request_id"] == req_id)
-        assert len(req_item["unresolved_obligations"]) >= 1
+        assert len(req_item["blocking_reasons"]) >= 1
 
         blocked_approve = admin_client.patch(
             f"/api/admin/deactivation-requests/{req_id}",
-            json={"decision": "approved"},
+            json={"action": "approve"},
         )
         assert blocked_approve.status_code == 409
 
@@ -448,7 +457,7 @@ def test_registration_approval_and_deactivation_request_workflows(client, db_ses
 
         approved_deact = admin_client.patch(
             f"/api/admin/deactivation-requests/{req_id}",
-            json={"decision": "approved", "admin_note": "All obligations cleared."},
+            json={"action": "approve", "admin_comment": "All obligations cleared."},
         )
         assert approved_deact.status_code == 200
         assert approved_deact.json()["status"] == "approved"
@@ -498,7 +507,7 @@ def test_listings_crud_image_validation_cart_favourites_and_categories(client, d
             data={"listing_id": str(new_listing_id), "display_order": "1"},
             files={"file": ("exploit.txt", io.BytesIO(b"not an image"), "text/plain")},
         )
-        assert bad_img.status_code == 400
+        assert bad_img.status_code == 422
 
         # Seller uploads 2 valid PNG images via multipart/form-data
         fake_png = (

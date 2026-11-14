@@ -157,8 +157,6 @@ CATEGORY_ALIASES: dict[str, tuple[str, ...]] = {
 GENERIC_CATEGORY_TERMS = {
     "book",
     "books",
-    "textbook",
-    "textbooks",
     "study",
     "material",
     "materials",
@@ -192,7 +190,7 @@ KEYWORD_SYNONYMS: dict[str, tuple[str, ...]] = {
     "bicycle": ("cycle", "bicycle", "bycycle"),
     "bicycles": ("cycle", "bicycle", "bycycle"),
     "bike": ("cycle", "bicycle", "bycycle"),
-    "textbook": ("book", "probability", "mathematics", "guide"),
+    "textbook": ("textbook", "textbooks"),
     "textbooks": ("book", "probability", "mathematics", "guide"),
     "books": ("book", "probability", "mathematics", "guide"),
     "book": ("book", "probability", "mathematics", "guide"),
