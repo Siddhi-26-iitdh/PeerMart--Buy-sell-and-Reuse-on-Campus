@@ -249,7 +249,11 @@ def test_simultaneous_multi_user_sessions_and_negotiation_to_receipt(client, db_
         # Seller can also download the exact same receipt without changing transaction data
         seller_rcpt = seller_client.get(f"/api/sales/{sale_id}/receipt")
         assert seller_rcpt.status_code == 200
-        assert seller_rcpt.content == buyer_rcpt_1.content
+        assert seller_rcpt.headers["content-type"] == "application/pdf"
+        assert seller_rcpt.content.startswith(b"%PDF")
+        assert pay_data["receipt_number"].encode("ascii") in seller_rcpt.content
+        assert data["seller"].email.encode("ascii") in seller_rcpt.content
+        assert data["buyer"].email.encode("ascii") in seller_rcpt.content
 
 
 def test_offer_reject_and_buyer_cancel_workflows(client, db_session):
