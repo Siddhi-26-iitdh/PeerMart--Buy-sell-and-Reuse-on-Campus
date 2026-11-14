@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.auth_dependencies import require_current_user
@@ -21,11 +21,16 @@ from app.schemas.offers import (
     OfferResponse,
     OfferStatusUpdate,
 )
+from app.services.state_machine import ACTIVE_OFFER_STATUSES, can_transition_offer
 
 router = APIRouter(prefix="/offers", tags=["Offer"])
 
 
-def _enrich_offers(db: Session, offers: list[Offer]) -> list[OfferDetailResponse]:
+def _enrich_offers(
+    db: Session,
+    offers: list[Offer],
+    viewer: User | None = None,
+) -> list[OfferDetailResponse]:
     if not offers:
         return []
 
@@ -88,6 +93,24 @@ def _enrich_offers(db: Session, offers: list[Offer]) -> list[OfferDetailResponse
             else (f"PM-RCPT-{sale.sale_id:05d}" if sale else None)
         )
 
+        # Req 1: Reveal seller_email only to the buyer who submitted this offer, the seller, or an admin.
+        can_see_seller_email = bool(
+            viewer
+            and (
+                viewer.role == "admin"
+                or viewer.user_id == off.buyer_id
+                or (listing and viewer.user_id == listing.seller_id)
+            )
+        )
+        can_see_buyer_email = bool(
+            viewer
+            and (
+                viewer.role == "admin"
+                or viewer.user_id == off.buyer_id
+                or (listing and viewer.user_id == listing.seller_id)
+            )
+        )
+
         enriched.append(
             OfferDetailResponse(
                 offer_id=off.offer_id,
@@ -108,9 +131,9 @@ def _enrich_offers(db: Session, offers: list[Offer]) -> list[OfferDetailResponse
                 seller_name=(
                     f"{seller.f_name} {seller.l_name}".strip() if seller else ""
                 ),
-                seller_email=seller.email if seller else "",
+                seller_email=seller.email if (seller and can_see_seller_email) else "",
                 buyer_name=f"{buyer.f_name} {buyer.l_name}".strip() if buyer else "",
-                buyer_email=buyer.email if buyer else "",
+                buyer_email=buyer.email if (buyer and can_see_buyer_email) else "",
                 sale_id=sale.sale_id if sale else None,
                 receipt_number=receipt_num,
                 receipt_url=f"/api/sales/{sale.sale_id}/receipt" if sale else None,
@@ -123,15 +146,34 @@ def _enrich_offers(db: Session, offers: list[Offer]) -> list[OfferDetailResponse
 def list_offers(
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=100),
+    current_user: User = Depends(require_current_user),
     db: Session = Depends(get_db),
 ):
-    total = db.scalar(select(func.count()).select_from(Offer)) or 0
-    items = db.scalars(
-        select(Offer)
-        .order_by(Offer.offer_id)
-        .offset((page - 1) * size)
-        .limit(size)
-    ).all()
+    if current_user.role == "admin":
+        total = db.scalar(select(func.count()).select_from(Offer)) or 0
+        items = db.scalars(
+            select(Offer)
+            .order_by(Offer.offer_id)
+            .offset((page - 1) * size)
+            .limit(size)
+        ).all()
+    else:
+        stmt = (
+            select(Offer)
+            .join(Listing, Offer.listing_id == Listing.listing_id)
+            .where(
+                or_(
+                    Offer.buyer_id == current_user.user_id,
+                    Listing.seller_id == current_user.user_id,
+                )
+            )
+        )
+        total = db.scalar(
+            select(func.count()).select_from(stmt.subquery())
+        ) or 0
+        items = db.scalars(
+            stmt.order_by(Offer.offer_id).offset((page - 1) * size).limit(size)
+        ).all()
 
     return {
         "items": items,
@@ -165,7 +207,7 @@ def list_sent_offers(
     )
 
     return OfferDetailListResponse(
-        items=_enrich_offers(db, rows),
+        items=_enrich_offers(db, rows, viewer=current_user),
         total=total,
         page=page,
         size=size,
@@ -198,7 +240,7 @@ def list_received_offers(
     )
 
     return OfferDetailListResponse(
-        items=_enrich_offers(db, rows),
+        items=_enrich_offers(db, rows, viewer=current_user),
         total=total,
         page=page,
         size=size,
@@ -212,7 +254,7 @@ def create_offer(
     db: Session = Depends(get_db),
 ):
     listing = db.get(Listing, payload.listing_id)
-    if listing is None or listing.status == "removed":
+    if listing is None or listing.status in ("removed", "archived"):
         raise HTTPException(status_code=404, detail="Listing not found")
 
     if listing.seller_id == current_user.user_id:
@@ -231,7 +273,7 @@ def create_offer(
         select(Offer).where(
             Offer.listing_id == payload.listing_id,
             Offer.buyer_id == current_user.user_id,
-            Offer.status.in_(["pending", "accepted"]),
+            Offer.status.in_(ACTIVE_OFFER_STATUSES),
         )
     )
     if existing_active is not None:
@@ -250,7 +292,7 @@ def create_offer(
     db.commit()
     db.refresh(offer)
 
-    return _enrich_offers(db, [offer])[0]
+    return _enrich_offers(db, [offer], viewer=current_user)[0]
 
 
 @router.patch("/{offer_id}", response_model=OfferDetailResponse)
@@ -265,10 +307,15 @@ def update_offer_status(
         raise HTTPException(status_code=404, detail="Offer not found")
 
     listing = db.get(Listing, offer.listing_id)
-    if listing is None or listing.status == "removed":
+    if listing is None or listing.status in ("removed", "archived"):
         raise HTTPException(status_code=404, detail="Listing not found")
 
     target_status = payload.status
+    if not can_transition_offer(offer.status, target_status):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Invalid offer state transition from '{offer.status}' to '{target_status}'",
+        )
 
     if target_status == "accepted":
         if listing.seller_id != current_user.user_id:
@@ -291,7 +338,7 @@ def update_offer_status(
             select(Offer).where(
                 Offer.listing_id == listing.listing_id,
                 Offer.offer_id != offer.offer_id,
-                Offer.status.in_(["accepted", "paid"]),
+                Offer.status.in_(["accepted", "payment_pending", "completed", "paid"]),
             )
         )
         if competing_accepted is not None:
@@ -300,19 +347,10 @@ def update_offer_status(
                 detail="Another offer has already been accepted for this listing",
             )
 
+        # Req 11: Reserve listing for accepted buyer, but DO NOT reject competing pending offers yet.
+        # Competing offers stay pending until payment succeeds.
         offer.status = "accepted"
         listing.status = "reserved"
-
-        # Automatically reject competing pending offers so they cannot be accepted
-        other_pending = db.scalars(
-            select(Offer).where(
-                Offer.listing_id == listing.listing_id,
-                Offer.offer_id != offer.offer_id,
-                Offer.status == "pending",
-            )
-        ).all()
-        for other in other_pending:
-            other.status = "rejected"
 
     elif target_status == "rejected":
         if listing.seller_id != current_user.user_id:
@@ -320,12 +358,7 @@ def update_offer_status(
                 status_code=403,
                 detail="Only the listing seller can reject an offer",
             )
-        if offer.status not in {"pending", "accepted"}:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Cannot reject an offer with status '{offer.status}'",
-            )
-        was_accepted = offer.status == "accepted"
+        was_accepted = offer.status in ("accepted", "payment_pending")
         offer.status = "rejected"
         if was_accepted and listing.status == "reserved":
             listing.status = "available"
@@ -336,19 +369,14 @@ def update_offer_status(
                 status_code=403,
                 detail="Only the buyer who submitted the offer can cancel it",
             )
-        if offer.status not in {"pending", "accepted"}:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Cannot cancel an offer with status '{offer.status}'",
-            )
-        was_accepted = offer.status == "accepted"
+        was_accepted = offer.status in ("accepted", "payment_pending")
         offer.status = "cancelled"
         if was_accepted and listing.status == "reserved":
             listing.status = "available"
 
     db.commit()
     db.refresh(offer)
-    return _enrich_offers(db, [offer])[0]
+    return _enrich_offers(db, [offer], viewer=current_user)[0]
 
 
 @router.get(
@@ -358,6 +386,7 @@ def update_offer_status(
 )
 def get_offer(
     item_id: int,
+    current_user: User = Depends(require_current_user),
     db: Session = Depends(get_db),
 ):
     item = db.get(Offer, item_id)
@@ -366,6 +395,17 @@ def get_offer(
         raise HTTPException(
             status_code=404,
             detail="Offer not found",
+        )
+
+    listing = db.get(Listing, item.listing_id)
+    if (
+        current_user.role != "admin"
+        and item.buyer_id != current_user.user_id
+        and (listing is None or listing.seller_id != current_user.user_id)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to view this offer",
         )
 
     return item

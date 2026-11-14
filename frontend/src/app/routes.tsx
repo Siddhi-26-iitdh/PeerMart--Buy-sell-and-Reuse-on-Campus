@@ -1,19 +1,31 @@
 import {
-  getAdminUsers,
+  createAdminCategory,
+  decideAdminDeactivationRequest,
+  decideAdminRegistration,
+  deleteAdminCategory,
   getAdminCategories,
+  getAdminDeactivationRequests,
+  getAdminOverview,
+  getAdminRegistrations,
   getAdminUserActivity,
-  updateAdminUserStatus,
+  getAdminUsers,
+  updateAdminCategory,
   updateAdminListingStatus,
+  updateAdminUserStatus,
+  type AdminCategory,
+  type AdminOverview,
   type AdminUserActivity,
 } from "./admin-api";
 import { runAiSearch, type AISearchResponse } from "./ai-search-api";
 import {
-  deactivateAccount as apiDeactivateAccount,
   getCurrentUser,
+  getMyDeactivationRequests,
   login as apiLogin,
   logout as apiLogout,
   register as apiRegister,
+  submitDeactivationRequest,
   updateProfile as apiUpdateProfile,
+  type AccountRequestItem,
   type AuthUser,
 } from "./auth-api";
 import {
@@ -371,7 +383,7 @@ function Footer() {
         </div>
         <div><h4>Marketplace</h4><Link to="/browse">Browse categories</Link><Link to="/ai-search">AI Search</Link><Link to="/sell">Sell an item</Link></div>
         <div><h4>PeerMart</h4><Link to="/terms">Terms & conditions</Link><Link to="/contact-admin">Contact Admin</Link></div>
-        <div><h4>Need help?</h4><p>Contact your campus administrator</p><span className="muted">admin@iitdh.ac.in</span></div>
+        <div><h4>Need help?</h4><p>Contact your campus administrator</p><span className="muted">testadmin63@iitdh.ac.in</span></div>
       </div>
       <div className="container footer-bottom"><span>© 2026 PeerMart. Campus community marketplace.</span><span>Buy smart · Sell easy · Reuse more</span></div>
     </footer>
@@ -450,7 +462,7 @@ function MockPaymentModal({
                 icon={<Check size={18} />}
                 onClick={() => void handleSimulate("success")}
               >
-                {processing ? "Processing..." : "Simulate Successful Payment"}
+                {processing ? "Processing..." : "Complete Demo Payment (Simulate Success)"}
               </Button>
               <div style={{ display: "flex", gap: 10 }}>
                 <Button
@@ -578,6 +590,12 @@ function Layout() {
       await loadUserRecords();
     }
   }, [isLoggedIn, loadUserRecords]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     void refreshMarketplace();
@@ -748,7 +766,8 @@ function offerTone(status: string): "green" | "blue" | "amber" | "slate" {
 
 function formatOfferStatus(status: string): string {
   const s = status.toLowerCase();
-  if (s === "paid") return "Paid";
+  if (s === "completed" || s === "paid") return "Completed";
+  if (s === "payment_pending") return "Payment Pending";
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
@@ -1129,7 +1148,7 @@ function BrowsePage() {
           onSearch={applyNow}
           onClear={clearAll}
         />
-        <div className="results-head">
+        <div className="results-head" id="browse-results">
           <div>
             <h2>Campus listings</h2>
             <p>{visibleProducts.length} matching {visibleProducts.length === 1 ? "item" : "items"}</p>
@@ -1148,7 +1167,7 @@ function BrowsePage() {
         ) : (
           <div className="empty-state soft">
             <span className="empty-icon"><Search /></span>
-            <h2>No matching items</h2>
+            <h2>No Matching Products Found</h2>
             <p>Try a different keyword, category, price range, or condition.</p>
             <Button onClick={clearAll}>Clear filters</Button>
           </div>
@@ -1158,7 +1177,7 @@ function BrowsePage() {
             <button
               className="btn btn-outline"
               disabled={currentPage === 1}
-              onClick={() => setPage(currentPage - 1)}
+              onClick={() => { setPage(currentPage - 1); document.getElementById("browse-results")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
             >
               Previous
             </button>
@@ -1166,7 +1185,7 @@ function BrowsePage() {
             <button
               className="btn btn-outline"
               disabled={currentPage === totalPages}
-              onClick={() => setPage(currentPage + 1)}
+              onClick={() => { setPage(currentPage + 1); document.getElementById("browse-results")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
             >
               Next
             </button>
@@ -1316,7 +1335,7 @@ function AISearchPage() {
               {matchedProducts.length > 0 ? (
                 <div className="product-grid">{matchedProducts.map((product) => <ProductCard product={product} key={product.id} />)}</div>
               ) : (
-                <div className="empty-state soft"><span className="empty-icon"><Search /></span><h2>No close matches found</h2><p>Try fewer words, a higher budget, or continue with manual filters.</p><Link to="/browse" className="btn btn-primary">Go to conventional search</Link></div>
+                <div className="empty-state soft"><span className="empty-icon"><Search /></span><h2>No Matching Products Found</h2><p>Try fewer words, a higher budget, or continue with manual filters.</p><Link to="/browse" className="btn btn-primary">Go to conventional search</Link></div>
               )}
             </>
           ) : null
@@ -1375,7 +1394,7 @@ function CategoryPage() {
         {visibleProducts.length > 0 ? (
           <div className="product-grid">{visibleProducts.map((product) => <ProductCard product={product} key={product.id} />)}</div>
         ) : (
-          <div className="empty-state soft"><span className="empty-icon"><Search /></span><h2>No matching items</h2><p>Try clearing the price or condition filters to see more listings in this category.</p><Button onClick={clearFilters}>Clear filters</Button></div>
+          <div className="empty-state soft"><span className="empty-icon"><Search /></span><h2>No Matching Products Found</h2><p>Try clearing the price or condition filters to see more listings in this category.</p><Button onClick={clearFilters}>Clear filters</Button></div>
         )}
       </section>
     </>
@@ -1663,13 +1682,14 @@ function AuthShell({ register = false }: { register?: boolean }) {
   const [password, setPassword] = useState("");
   const [reenteredPassword, setReenteredPassword] = useState("");
   const [authError, setAuthError] = useState("");
+  const [registrationPendingUser, setRegistrationPendingUser] = useState<AuthUser | null>(null);
   const [forgotPassword, setForgotPassword] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
   const { setLoggedIn, setCurrentUser } = useCart();
-  const returnTo = (location.state as { from?: string } | null)?.from ?? (register ? "/profile" : "/");
+  const returnTo = (location.state as { from?: string } | null)?.from ?? "/";
 
   const submitAuth = async (event: FormEvent) => {
     event.preventDefault();
@@ -1694,12 +1714,12 @@ function AuthShell({ register = false }: { register?: boolean }) {
       }
 
       if (!accepted) {
-        setAuthError("Please accept the Terms and Conditions.");
+        setAuthError("Please accept the Terms, Conditions, and Privacy Notice.");
         return;
       }
 
       try {
-        const user = await apiRegister({
+        const createdUser = await apiRegister({
           f_name: firstName.trim(),
           l_name: lastName.trim(),
           email: normalizedEmail,
@@ -1709,9 +1729,13 @@ function AuthShell({ register = false }: { register?: boolean }) {
           terms_accepted: accepted,
         });
 
-        setCurrentUser(user);
-        setLoggedIn(true);
-        navigate(returnTo, { replace: true });
+        if (createdUser.account_status === "pending") {
+          setRegistrationPendingUser(createdUser);
+        } else {
+          setCurrentUser(createdUser);
+          setLoggedIn(true);
+          navigate(returnTo, { replace: true });
+        }
       } catch (error) {
         setAuthError(
           error instanceof Error
@@ -1743,21 +1767,54 @@ function AuthShell({ register = false }: { register?: boolean }) {
     }
   };
 
+  if (registrationPendingUser) {
+    return (
+      <section className="container content-section">
+        <div className="success-panel" role="status">
+          <span><Clock3 /></span>
+          <h1>Registration Pending Admin Approval</h1>
+          <p>
+            Thank you, <strong>{registrationPendingUser.f_name} {registrationPendingUser.l_name}</strong> ({registrationPendingUser.email}).
+            Your student account has been created with status <strong>Pending Approval</strong>.
+          </p>
+          <p className="muted">
+            Once the campus administrator (<strong>testadmin63@iitdh.ac.in</strong>) approves your registration, you can sign in and access all PeerMart features.
+          </p>
+          <div>
+            <Link className="btn btn-primary" to="/login">Go to Sign In</Link>
+            <Link className="btn btn-outline" to="/">Browse Marketplace</Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="auth-page">
       <div className={register ? "auth-card auth-wide" : "auth-card"}>
         <Logo />
-        <div className="auth-title"><h1>{register ? "Join your campus marketplace" : "Welcome to PeerMart"}</h1><p>{register ? "Create an account with your college email." : "Sign in to your campus marketplace account."}</p></div>
+        <div className="auth-title">
+          <h1>{register ? "Join your campus marketplace" : "Welcome to PeerMart"}</h1>
+          <p>{register ? "Create an account with your verified @iitdh.ac.in email. New accounts require administrator approval." : "Sign in to your campus marketplace account."}</p>
+        </div>
         <form onSubmit={submitAuth} className="form-stack">
           {register && <div className="form-row"><label className="field"><span>First name</span><input required placeholder="First name" value={firstName} onChange={(event) => setFirstName(event.target.value)} /></label><label className="field"><span>Last name</span><input required placeholder="Last name" value={lastName} onChange={(event) => setLastName(event.target.value)} /></label></div>}
           {register && <div className="form-row"><label className="field"><span>Gender</span><div className="select-wrap"><select value={gender} onChange={(event) => setGender(event.target.value)}><option value="">Select</option><option>Female</option><option>Male</option><option>Prefer not to say</option></select><ChevronDown size={16} /></div></label><label className="field"><span>Phone number</span><input required placeholder="9876543210" value={phone} onChange={(event) => setPhone(event.target.value)} /></label></div>}
           <label className="field"><span>College email ID</span><div className="input-icon"><Mail size={17} /><input required type="email" placeholder="name@iitdh.ac.in" value={email} onChange={(event) => setEmail(event.target.value)} /></div></label>
           <label className="field"><span>Password</span><div className="password-wrap"><input required minLength={8} type={show ? "text" : "password"} placeholder="At least 8 characters" value={password} onChange={(event) => setPassword(event.target.value)} /><button type="button" onClick={() => setShow(!show)}>{show ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>
           {register && <label className="field"><span>Re-enter password</span><input required minLength={8} type={show ? "text" : "password"} placeholder="Repeat password" value={reenteredPassword} onChange={(event) => setReenteredPassword(event.target.value)} /></label>}
-          {register && <label className="check-row"><input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} /><span>I agree to the <Link to="/terms">Terms and Conditions</Link> and campus community rules.</span></label>}
+          {register && (
+            <div className="notice" style={{ fontSize: 13 }}>
+              <ShieldCheck size={18} />
+              <span>
+                <strong>Privacy &amp; Data Protection Notice:</strong> PeerMart collects your name, @iitdh.ac.in email, and phone number solely for campus marketplace verification. Your email remains private and is shared only with buyers who submit a valid offer on your listing.
+              </span>
+            </div>
+          )}
+          {register && <label className="check-row"><input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} /><span>I agree to the <Link to="/terms">Terms, Conditions &amp; Privacy Policy</Link> and campus community rules.</span></label>}
           {authError && <div className="auth-error" role="alert"><CircleHelp size={17} /><span>{authError}</span></div>}
           {!register && <div className="form-helper"><label className="check-row"><input type="checkbox" /><span>Remember me</span></label><button type="button" onClick={() => { setResetSent(false); setForgotPassword(true); }}>Forgot password?</button></div>}
-          <Button type="submit" className="full" disabled={register && !accepted}>{register ? "Create account" : "Sign in"}</Button>
+          <Button type="submit" className="full" disabled={register && !accepted}>{register ? "Submit Registration" : "Sign in"}</Button>
         </form>
 
         <p className="auth-switch">{register ? "Already have an account?" : "New to PeerMart?"} <Link to={register ? "/login" : "/register"} state={location.state}>{register ? "Sign in" : "Register"}</Link></p>
@@ -1781,7 +1838,7 @@ function AuthShell({ register = false }: { register?: boolean }) {
                 <span className="modal-icon success"><Check /></span>
                 <h2>Check your email</h2>
                 <p>Password reset instructions have been requested for <strong>{resetEmail}</strong>.</p>
-                <div className="notice"><CircleHelp size={18} /><span>This prototype does not send real email. In the implemented system, the secure reset link would be delivered to this IIT DH address.</span></div>
+                <div className="notice"><CircleHelp size={18} /><span>Contact <strong>testadmin63@iitdh.ac.in</strong> if you need manual account recovery assistance.</span></div>
                 <Button className="full" onClick={() => setForgotPassword(false)}>Return to login</Button>
               </div>
             )}
@@ -1808,8 +1865,26 @@ function SellPage() {
 
   const handleFileChange = (files: FileList | null) => {
     if (!files) return;
-    const next = [...selectedFiles, ...Array.from(files)].slice(0, 5);
-    setSelectedFiles(next);
+    setError(null);
+    const incoming = Array.from(files);
+    for (const file of incoming) {
+      const lower = file.name.toLowerCase();
+      if (!lower.endsWith(".jpg") && !lower.endsWith(".jpeg") && !lower.endsWith(".png")) {
+        setError(`"${file.name}" is not supported. Please upload only JPEG (.jpg, .jpeg) or PNG (.png) images.`);
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setError(`"${file.name}" exceeds the 5 MB per-image size limit.`);
+        return;
+      }
+    }
+    const combined = [...selectedFiles, ...incoming];
+    if (combined.length > 5) {
+      setError("You can upload a maximum of 5 images per listing.");
+      setSelectedFiles(combined.slice(0, 5));
+      return;
+    }
+    setSelectedFiles(combined);
   };
 
   const removeSelectedFile = (index: number) => {
@@ -1818,6 +1893,7 @@ function SellPage() {
 
   const handlePublish = async (event: FormEvent) => {
     event.preventDefault();
+    if (submitting) return;
     setError(null);
 
     if (!categoryId) {
@@ -1829,8 +1905,13 @@ function SellPage() {
       setError("Please enter a valid positive price.");
       return;
     }
+    if (selectedFiles.length < 2 || selectedFiles.length > 5) {
+      setError("Please upload between 2 and 5 product photos (JPEG or PNG).");
+      return;
+    }
 
     setSubmitting(true);
+    let createdListingId: number | null = null;
     try {
       const created = await createListingApi({
         category_id: Number(categoryId),
@@ -1841,14 +1922,23 @@ function SellPage() {
         brand: brand.trim() || null,
         color: color.trim() || null,
       });
+      createdListingId = created.listing_id;
 
       for (let idx = 0; idx < selectedFiles.length; idx += 1) {
-        await uploadListingImageFile(created.listing_id, selectedFiles[idx], idx + 1);
+        await uploadListingImageFile(createdListingId, selectedFiles[idx], idx + 1);
       }
 
       await refreshMarketplace();
-      setPublishedId(created.listing_id);
+      setPublishedId(createdListingId);
     } catch (err) {
+      // Req 5 & 19: Compensating cleanup so failed image uploads never leave a partial listing or wrong images
+      if (createdListingId !== null) {
+        try {
+          await deleteListingApi(createdListingId);
+        } catch {
+          // Ignore cleanup error
+        }
+      }
       setError(err instanceof Error ? err.message : "Failed to publish listing");
     } finally {
       setSubmitting(false);
@@ -1887,7 +1977,7 @@ function SellPage() {
 
   return (
     <>
-      <PageHero eyebrow="Sell on PeerMart" title="List your item" copy="Give something useful a second life. Clear photos and honest details help your item sell faster." />
+      <PageHero eyebrow="Sell on PeerMart" title="List your item" copy="Give something useful a second life. Upload 2–5 clear JPEG or PNG photos and honest details." />
       <section className="container form-layout">
         <form className="listing-form" onSubmit={(e) => void handlePublish(e)}>
           {error && (
@@ -1997,14 +2087,14 @@ function SellPage() {
           </div>
 
           <div className="form-section">
-            <div className="form-section-title"><span>2</span><div><h2>Add product photos</h2><p>Upload up to 5 clear images (JPG, PNG, WEBP).</p></div></div>
+            <div className="form-section-title"><span>2</span><div><h2>Add product photos (2–5 required)</h2><p>Upload between 2 and 5 clear JPEG or PNG images (max 5 MB each).</p></div></div>
             <label className="upload-zone">
               <UploadCloud size={30} />
-              <strong>Drop photos here or click to browse</strong>
-              <span>JPG, PNG, or WEBP · up to 5 photos</span>
+              <strong>Drop photos here or click to browse ({selectedFiles.length}/5 selected)</strong>
+              <span>JPG or PNG · minimum 2, maximum 5 (max 5 MB each)</span>
               <input
                 type="file"
-                accept=".jpg,.jpeg,.png,.webp,.gif"
+                accept=".jpg,.jpeg,.png,image/jpeg,image/png"
                 multiple
                 onChange={(e) => handleFileChange(e.target.files)}
               />
@@ -2033,10 +2123,10 @@ function SellPage() {
         <aside className="form-tips">
           <h3><Sparkles size={18} /> Tips for a great listing</h3>
           <ul>
-            <li><Check /> Use bright, clear photos</li>
-            <li><Check /> Mention any defects</li>
+            <li><Check /> Upload 2–5 bright JPEG or PNG photos</li>
+            <li><Check /> Mention any defects honestly</li>
             <li><Check /> Set a fair student price</li>
-            <li><Check /> Respond promptly to student offers</li>
+            <li><Check /> Your email stays private until a buyer makes an offer</li>
           </ul>
           <div className="eco-tip"><Leaf /><strong>Why reuse?</strong><p>Every item sold keeps useful materials in circulation and helps another student spend less.</p></div>
         </aside>
@@ -2082,6 +2172,13 @@ function EditListingModal({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
   const [title, setTitle] = useState(listing.title);
   const [price, setPrice] = useState(String(listing.numericPrice ?? Number(listing.price.replace(/[₹,]/g, ""))));
   const [condition, setCondition] = useState<"used" | "new">(listing.condition === "New" ? "new" : "used");
@@ -2275,6 +2372,15 @@ function ProfilePage() {
 
   const [editing, setEditing] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [deactivationModalOpen, setDeactivationModalOpen] = useState(false);
+  const [deactivationReason, setDeactivationReason] = useState("");
+  const [myDeactivationReqs, setMyDeactivationReqs] = useState<AccountRequestItem[]>([]);
+
+  useEffect(() => {
+    getMyDeactivationRequests()
+      .then(setMyDeactivationReqs)
+      .catch(() => {});
+  }, []);
   const [saved, setSaved] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [editingListing, setEditingListing] = useState<Product | null>(null);
@@ -2820,29 +2926,107 @@ function ProfilePage() {
         <CircleHelp />
         <div>
           <strong>Need help?</strong>
-          <p>Contact your campus administrator at <b>admin@iitdh.ac.in</b> or via <Link to="/contact-admin"><strong>Contact Admin</strong></Link>.</p>
+          <p>Contact your campus administrator at <b>testadmin63@iitdh.ac.in</b> or via <Link to="/contact-admin"><strong>Contact Admin</strong></Link>.</p>
         </div>
       </div>
+      {myDeactivationReqs.length > 0 && (
+        <section className="admin-panel" style={{ marginTop: 24 }}>
+          <div className="panel-head">
+            <div>
+              <h2>Account Deactivation Requests</h2>
+              <p>Administrator approval is required before an account is deactivated</p>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Submitted</th>
+                <th>Reason</th>
+                <th>Status</th>
+                <th>Admin Note / Obligations</th>
+              </tr>
+            </thead>
+            <tbody>
+              {myDeactivationReqs.map((req) => (
+                <tr key={req.request_id}>
+                  <td>{new Date(req.created_at).toLocaleString("en-IN")}</td>
+                  <td>{req.reason || "No reason specified"}</td>
+                  <td>
+                    <StatusBadge tone={req.status === "approved" ? "green" : req.status === "pending" ? "amber" : "slate"}>
+                      {req.status}
+                    </StatusBadge>
+                  </td>
+                  <td>
+                    {req.admin_comment && <div><strong>Admin:</strong> {req.admin_comment}</div>}
+                    {req.blocking_reasons.length > 0 && (
+                      <div style={{ color: "#b91c1c", fontSize: 13 }}>
+                        {req.blocking_reasons.join(" ")}
+                      </div>
+                    )}
+                    {!req.admin_comment && req.blocking_reasons.length === 0 && "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
       <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
         <Button variant="danger" icon={<LogOut size={17} />} onClick={() => setLoggingOut(true)}>Log out</Button>
         {currentUser?.role !== "admin" && (
           <Button
             variant="outline"
-            onClick={async () => {
-              if (!window.confirm("Deactivate your PeerMart account?")) return;
-              try {
-                await apiDeactivateAccount();
-                setLoggedIn(false);
-                navigate("/login", { replace: true });
-              } catch (err) {
-                window.alert(err instanceof Error ? err.message : "Could not deactivate account");
-              }
-            }}
+            disabled={myDeactivationReqs.some((r) => r.status === "pending")}
+            onClick={() => setDeactivationModalOpen(true)}
           >
-            Deactivate account
+            {myDeactivationReqs.some((r) => r.status === "pending")
+              ? "Deactivation Request Pending"
+              : "Request Account Deactivation"}
           </Button>
         )}
       </div>
+
+      {deactivationModalOpen && (
+        <div className="modal-backdrop">
+          <form
+            className="modal"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                const created = await submitDeactivationRequest(deactivationReason);
+                setMyDeactivationReqs((prev) => [created, ...prev]);
+                setDeactivationModalOpen(false);
+                setDeactivationReason("");
+                setActionMessage("Deactivation request submitted for administrator review.");
+              } catch (err) {
+                window.alert(err instanceof Error ? err.message : "Could not submit deactivation request");
+              }
+            }}
+          >
+            <button type="button" className="modal-close" onClick={() => setDeactivationModalOpen(false)}><X /></button>
+            <span className="modal-icon logout-icon"><ShieldCheck /></span>
+            <h2>Request Account Deactivation</h2>
+            <p>
+              Account deactivation requires approval from the campus administrator (<strong>testadmin63@iitdh.ac.in</strong>).
+              Accounts with active offers, ongoing negotiations, or accepted offers awaiting payment cannot be deactivated until resolved.
+            </p>
+            <label className="field">
+              <span>Reason for deactivation (optional)</span>
+              <textarea
+                rows={3}
+                placeholder="e.g. Graduated from campus / no longer using PeerMart"
+                value={deactivationReason}
+                onChange={(e) => setDeactivationReason(e.target.value)}
+              />
+            </label>
+            <div className="modal-actions">
+              <Button variant="outline" onClick={() => setDeactivationModalOpen(false)}>Cancel</Button>
+              <Button type="submit" variant="danger">Submit Request</Button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {editing && (
         <div className="modal-backdrop">
@@ -2907,7 +3091,7 @@ function OrdersPage() {
   const { sentOffers, purchases, refreshMarketplace, openPaymentModal } = useCart();
   const [contactOffer, setContactOffer] = useState<OfferDetail | null>(null);
 
-  const activeSentOffers = sentOffers.filter((o) => o.status !== "paid");
+  const activeSentOffers = sentOffers.filter((o) => o.status !== "paid" && o.status !== "completed");
 
   const handleCancelOffer = async (offerId: number) => {
     try {
@@ -3466,77 +3650,94 @@ function AdminProductTable({
 function AdminPage() {
   const products = useProducts();
   const navigate = useNavigate();
-  const { setLoggedIn, currentUser } = useCart();
-  const [view, setView] = useState<"overview" | "users" | "listings" | "categories" | "messages">("overview");
-  const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
+  const { setLoggedIn, currentUser, refreshMarketplace } = useCart();
+  const [view, setView] = useState<
+    "overview" | "users" | "listings" | "categories" | "messages"
+  >("overview");
 
+  const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [adminUsers, setAdminUsers] = useState<
-    { id: number; name: string; email: string; joined: string; status: string }[]
+    { id: number; name: string; email: string; joined: string; status: string; role: string }[]
   >([]);
-
+  const [registrationReqs, setRegistrationReqs] = useState<AccountRequestItem[]>([]);
+  const [deactivationReqs, setDeactivationReqs] = useState<AccountRequestItem[]>([]);
   const [adminListings, setAdminListings] = useState(products);
+  const [adminCategories, setAdminCategories] = useState<AdminCategory[]>([]);
+  const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
+  const [adminDataError, setAdminDataError] = useState<string | null>(null);
+  const [adminBanner, setAdminBanner] = useState<string | null>(null);
+
+  // Search & filter state
+  const [userSearch, setUserSearch] = useState("");
+  const [userStatusFilter, setUserStatusFilter] = useState("all");
+  const [listingSearch, setListingSearch] = useState("");
+  const [listingStatusFilter, setListingStatusFilter] = useState("all");
+  const [msgStatusFilter, setMsgStatusFilter] = useState("all");
+  const [msgCategoryFilter, setMsgCategoryFilter] = useState("all");
+  const [replyDrafts, setReplyDrafts] = useState<Record<number, string>>({});
+
+  // Category CRUD state
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [editingCat, setEditingCat] = useState<{ id: number; name: string } | null>(null);
 
   useEffect(() => {
     setAdminListings(products);
   }, [products]);
 
-  const [adminCategories, setAdminCategories] = useState<string[]>([]);
-  const [adminDataError, setAdminDataError] = useState<string | null>(null);
+  const loadAdminData = useCallback(async () => {
+    try {
+      const [ov, users, categories, messagesRes, regReqs, deactReqs] = await Promise.all([
+        getAdminOverview(),
+        getAdminUsers(),
+        getAdminCategories(),
+        getAdminContactMessages(),
+        getAdminRegistrations(),
+        getAdminDeactivationRequests(),
+      ]);
+
+      setOverview(ov);
+      setAdminUsers(
+        users.map((user) => ({
+          id: user.user_id,
+          name: `${user.f_name} ${user.l_name}`,
+          email: user.email,
+          joined: new Date(user.created_at).toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }),
+          status: user.account_status,
+          role: user.role,
+        })),
+      );
+      setAdminCategories(categories);
+      setContactMessages(messagesRes.items);
+      setRegistrationReqs(regReqs);
+      setDeactivationReqs(deactReqs);
+      setAdminDataError(null);
+    } catch (error) {
+      setAdminDataError(
+        error instanceof Error ? error.message : "Unable to load admin data",
+      );
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadAdminData() {
-      try {
-        const [users, categories, messagesRes] = await Promise.all([
-          getAdminUsers(),
-          getAdminCategories(),
-          getAdminContactMessages(),
-        ]);
-
-        if (cancelled) return;
-
-        setAdminUsers(
-          users.map((user) => ({
-            id: user.user_id,
-            name: `${user.f_name} ${user.l_name}`,
-            email: user.email,
-            joined: new Date(user.created_at).toLocaleDateString("en-IN", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-            }),
-            status: user.account_status,
-          }))
-        );
-
-        setAdminCategories(
-          categories.map((category) => category.category_name)
-        );
-        setContactMessages(messagesRes.items);
-
-        setAdminDataError(null);
-      } catch (error) {
-        if (!cancelled) {
-          setAdminDataError(
-            error instanceof Error ? error.message : "Unable to load admin data"
-          );
-        }
-      }
-    }
-
     void loadAdminData();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [loadAdminData]);
 
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<{ type: "user" | "listing" | "category"; id: number | string; label: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: "user" | "listing" | "category";
+    id: number;
+    label: string;
+  } | null>(null);
+
   const selectedUser = adminUsers.find((user) => user.id === selectedUserId);
-  const categoryListings = selectedCategory ? adminListings.filter((listing) => listing.category === selectedCategory) : [];
+  const categoryListings = selectedCategory
+    ? adminListings.filter((listing) => listing.category === selectedCategory)
+    : [];
   const [userActivity, setUserActivity] = useState<AdminUserActivity | null>(null);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState<string | null>(null);
@@ -3560,7 +3761,7 @@ function AdminPage() {
       .catch((error) => {
         if (!cancelled) {
           setActivityError(
-            error instanceof Error ? error.message : "Unable to load activity"
+            error instanceof Error ? error.message : "Unable to load activity",
           );
         }
       })
@@ -3582,7 +3783,7 @@ function AdminPage() {
       window.alert(
         error instanceof Error
           ? error.message
-          : "Admin logout failed. Please try again."
+          : "Admin logout failed. Please try again.",
       );
     }
   };
@@ -3591,42 +3792,97 @@ function AdminPage() {
     if (!deleteTarget) return;
     try {
       if (deleteTarget.type === "user") {
-        const id = Number(deleteTarget.id);
-        await updateAdminUserStatus(id, "inactive");
-        setAdminUsers(current => current.map(user =>
-          user.id === id ? { ...user, status: "inactive" } : user
-        ));
+        await updateAdminUserStatus(deleteTarget.id, "inactive");
+        setAdminBanner(`Deactivated user "${deleteTarget.label}".`);
       } else if (deleteTarget.type === "listing") {
-        const id = Number(deleteTarget.id);
-        await updateAdminListingStatus(id, "removed");
-        setAdminListings(current => current.filter(item => item.id !== id));
-      } else {
-        window.alert("Category deletion is not supported yet.");
-        return;
+        await updateAdminListingStatus(deleteTarget.id, "removed");
+        setAdminBanner(`Removed listing "${deleteTarget.label}".`);
+      } else if (deleteTarget.type === "category") {
+        await deleteAdminCategory(deleteTarget.id);
+        setAdminBanner(`Deleted category "${deleteTarget.label}".`);
       }
       setDeleteTarget(null);
+      await loadAdminData();
+      await refreshMarketplace();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "Admin action failed");
     }
   };
 
-  const changeView = (nextView: "overview" | "users" | "listings" | "categories" | "messages") => {
+  const changeView = (
+    nextView: "overview" | "users" | "listings" | "categories" | "messages",
+  ) => {
     setView(nextView);
     setSelectedUserId(null);
     setSelectedCategory(null);
   };
 
+  const filteredUsers = adminUsers.filter((u) => {
+    const q = userSearch.trim().toLowerCase();
+    const matchesSearch =
+      !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+    const matchesStatus =
+      userStatusFilter === "all" || u.status.toLowerCase() === userStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const filteredListings = adminListings.filter((item) => {
+    const q = listingSearch.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      item.title.toLowerCase().includes(q) ||
+      (item.sellerName ?? "").toLowerCase().includes(q) ||
+      item.category.toLowerCase().includes(q);
+    const matchesStatus =
+      listingStatusFilter === "all" ||
+      (item.status ?? "Available").toLowerCase() === listingStatusFilter.toLowerCase();
+    return matchesSearch && matchesStatus;
+  });
+
+  const filteredMessages = contactMessages.filter((msg) => {
+    const matchesStatus =
+      msgStatusFilter === "all" || msg.status.toLowerCase() === msgStatusFilter;
+    const matchesCat =
+      msgCategoryFilter === "all" || msg.category === msgCategoryFilter;
+    return matchesStatus && matchesCat;
+  });
+
+  const pendingRegistrations = registrationReqs.filter((r) => r.status === "pending");
+  const pendingDeactivations = deactivationReqs.filter((r) => r.status === "pending");
+
   const headings = {
-    overview: ["Marketplace overview", "Monitor IIT DH marketplace activity and manage core records."],
-    users: ["User management", "Review and manage registered IIT DH marketplace accounts."],
-    listings: ["Listing management", "Review available products and remove inappropriate listings."],
-    categories: ["Category management", "Manage the categories students use when listing products."],
-    messages: ["Contact messages", "Review student support requests and listing reports."],
+    overview: [
+      "Marketplace overview",
+      "Monitor IIT Dharwad marketplace statistics, pending approvals, and live activity.",
+    ],
+    users: [
+      "User & request management",
+      "Approve student registrations, review deactivation requests, and manage accounts.",
+    ],
+    listings: [
+      "Listing management",
+      "Search, filter, and moderate marketplace listings while protecting active transactions.",
+    ],
+    categories: [
+      "Category management",
+      "Create, rename, and manage marketplace product categories.",
+    ],
+    messages: [
+      "Contact messages & Help Centre",
+      "Review student inquiries, respond with admin notes, and track resolution status.",
+    ],
   };
+
   const activeHeading = selectedUser
-    ? [selectedUser.name, "Review this user’s listings, negotiations, purchases, and sold items."]
+    ? [
+        selectedUser.name,
+        "Review this user’s listings, negotiations, purchases, and sold items.",
+      ]
     : selectedCategory
-      ? [selectedCategory, `Review every marketplace listing filed under ${selectedCategory}.`]
+      ? [
+          selectedCategory,
+          `Review every marketplace listing filed under ${selectedCategory}.`,
+        ]
       : headings[view];
 
   return (
@@ -3634,13 +3890,29 @@ function AdminPage() {
       <aside className="admin-side">
         <Logo to="/admin" />
         <nav>
-          <button className={view === "overview" ? "active" : ""} onClick={() => changeView("overview")}><LayoutDashboard /> Overview</button>
-          <button className={view === "users" ? "active" : ""} onClick={() => changeView("users")}><Users /> User management</button>
-          <button className={view === "listings" ? "active" : ""} onClick={() => changeView("listings")}><ShoppingBag /> Listings</button>
-          <button className={view === "categories" ? "active" : ""} onClick={() => changeView("categories")}><Tag /> Categories</button>
-          <button className={view === "messages" ? "active" : ""} onClick={() => changeView("messages")}><Mail /> Contact messages</button>
+          <button className={view === "overview" ? "active" : ""} onClick={() => changeView("overview")}>
+            <LayoutDashboard /> Overview
+          </button>
+          <button className={view === "users" ? "active" : ""} onClick={() => changeView("users")}>
+            <Users /> Users &amp; Requests
+          </button>
+          <button className={view === "listings" ? "active" : ""} onClick={() => changeView("listings")}>
+            <ShoppingBag /> Listings
+          </button>
+          <button className={view === "categories" ? "active" : ""} onClick={() => changeView("categories")}>
+            <Tag /> Categories
+          </button>
+          <button className={view === "messages" ? "active" : ""} onClick={() => changeView("messages")}>
+            <Mail /> Contact messages
+          </button>
         </nav>
-        <div className="admin-user"><div>{getUserInitials(currentUser)}</div><span><strong>{currentUser ? `${currentUser.f_name} ${currentUser.l_name}`.trim() : "Campus Admin"}</strong><small>{currentUser?.email ?? "admin@iitdh.ac.in"}</small></span></div>
+        <div className="admin-user">
+          <div>{getUserInitials(currentUser)}</div>
+          <span>
+            <strong>{currentUser ? `${currentUser.f_name} ${currentUser.l_name}`.trim() : "Campus Admin"}</strong>
+            <small>{currentUser?.email ?? "testadmin63@iitdh.ac.in"}</small>
+          </span>
+        </div>
         <button className="admin-logout" onClick={logoutAdmin}><LogOut size={16} /> Log out</button>
       </aside>
       <main className="admin-main">
@@ -3649,94 +3921,345 @@ function AdminPage() {
             Failed to load admin data: {adminDataError}
           </div>
         )}
-        <div className="admin-head"><div><span>ADMIN CONSOLE</span><h1>{activeHeading[0]}</h1><p>{activeHeading[1]}</p></div></div>
+        {adminBanner && (
+          <div role="status" className="save-confirmation" style={{ marginBottom: 16 }}>
+            <Check size={17} /> {adminBanner}
+          </div>
+        )}
+        <div className="admin-head">
+          <div>
+            <span>ADMIN CONSOLE · testadmin63@iitdh.ac.in</span>
+            <h1>{activeHeading[0]}</h1>
+            <p>{activeHeading[1]}</p>
+          </div>
+        </div>
 
         {view === "overview" && (
           <>
             <div className="metric-grid admin-metrics-three">
-              {[["Registered users", String(adminUsers.length), Users, "Student accounts"], ["Total listings", String(adminListings.length), ShoppingBag, "Active records"], ["Categories", String(adminCategories.length), Tag, "Marketplace groups"]].map(([label, value, Icon, trend]) => { const I = Icon as typeof Users; return <button className="metric" key={label as string} onClick={() => changeView(label === "Registered users" ? "users" : label === "Categories" ? "categories" : "listings")}><span><I /></span><p>{label as string}</p><strong>{value as string}</strong><small>{trend as string}</small></button>; })}
+              {[
+                ["Registered users", String(overview?.total_users ?? adminUsers.length), Users, `${overview?.active_users ?? 0} active · ${overview?.pending_registrations ?? pendingRegistrations.length} pending`, "users"],
+                ["Total listings", String(overview?.total_listings ?? adminListings.length), ShoppingBag, `${overview?.available_listings ?? 0} available · ${overview?.reserved_listings ?? 0} reserved · ${overview?.sold_listings ?? 0} sold`, "listings"],
+                ["Offers & Sales", `${overview?.total_offers ?? 0} / ${overview?.total_sales ?? 0}`, Tag, "Total offers / completed sales", "listings"],
+                ["Pending requests", String((overview?.pending_registrations ?? pendingRegistrations.length) + (overview?.pending_deactivations ?? pendingDeactivations.length)), Clock3, `${overview?.pending_registrations ?? 0} signups · ${overview?.pending_deactivations ?? 0} deactivations`, "users"],
+                ["Categories", String(adminCategories.length), Box, "Marketplace groups", "categories"],
+                ["Open inquiries", String(overview?.open_contact_messages ?? contactMessages.filter((m) => m.status !== "resolved").length), Mail, "Contact Admin messages", "messages"],
+              ].map(([label, value, Icon, trend, targetView]) => {
+                const I = Icon as typeof Users;
+                return (
+                  <button
+                    className="metric"
+                    key={label as string}
+                    onClick={() => changeView(targetView as "users" | "listings" | "categories" | "messages")}
+                  >
+                    <span><I /></span>
+                    <p>{label as string}</p>
+                    <strong>{value as string}</strong>
+                    <small>{trend as string}</small>
+                  </button>
+                );
+              })}
             </div>
             <section className="admin-panel">
-              <div className="panel-head"><div><h2>Recent listings</h2><p>Newest products in the marketplace</p></div><button onClick={() => changeView("listings")}>Manage listings</button></div>
-              <table><thead><tr><th>Listing</th><th>Category</th><th>Status</th><th>Price</th></tr></thead><tbody>{adminListings.slice(0, 6).map((product) => <tr key={product.id}><td><div className="table-product"><img src={product.image} alt="" /><strong>{product.title}</strong></div></td><td>{product.category}</td><td><StatusBadge tone={product.status === "Available" ? "green" : product.status === "Reserved" ? "amber" : "slate"}>{product.status ?? "Unknown"}</StatusBadge></td><td>{product.price}</td></tr>)}</tbody></table>
+              <div className="panel-head">
+                <div><h2>Recent listings</h2><p>Newest products in the marketplace</p></div>
+                <button onClick={() => changeView("listings")}>Manage listings</button>
+              </div>
+              <table>
+                <thead>
+                  <tr><th>Listing</th><th>Seller</th><th>Category</th><th>Status</th><th>Price</th></tr>
+                </thead>
+                <tbody>
+                  {adminListings.slice(0, 8).map((product) => (
+                    <tr key={product.id}>
+                      <td><div className="table-product"><img src={product.image} alt="" /><strong>{product.title}</strong></div></td>
+                      <td>{product.sellerName ?? "Campus Seller"}</td>
+                      <td>{product.category}</td>
+                      <td><StatusBadge tone={product.status === "Available" ? "green" : product.status === "Reserved" ? "amber" : "slate"}>{product.status ?? "Available"}</StatusBadge></td>
+                      <td>{product.price}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </section>
           </>
         )}
 
         {view === "users" && !selectedUser && (
-          <section className="admin-panel">
-            <div className="panel-head"><div><h2>Registered users</h2><p>{adminUsers.length} active student accounts</p></div></div>
-            {adminUsers.length > 0 ? <table><thead><tr><th>User</th><th>College email</th><th>Registered</th><th>Status</th><th>Action</th></tr></thead><tbody>{adminUsers.map((user) => <tr key={user.id}><td><button className="table-user-link" onClick={() => setSelectedUserId(user.id)}>{user.name}</button></td><td>{user.email}</td><td>{user.joined}</td><td><StatusBadge>{user.status}</StatusBadge></td><td><div className="table-actions"><button className="table-view" onClick={() => setSelectedUserId(user.id)}>View activity</button>{user.status === "active" ? (
-  <button className="table-delete" onClick={() => setDeleteTarget({ type: "user", id: user.id, label: user.name })}>
-    <Trash2 size={14} /> Deactivate
-  </button>
-) : (
-  <button className="table-view" onClick={async () => {
-    try {
-      await updateAdminUserStatus(user.id, "active");
-      setAdminUsers(current => current.map(item =>
-        item.id === user.id ? { ...item, status: "active" } : item
-      ));
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Reactivation failed");
-    }
-  }}>Reactivate</button>
-)}</div></td></tr>)}</tbody></table> : <div className="admin-empty">No user accounts remain.</div>}
-          </section>
+          <div className="admin-detail-stack">
+            {/* Pending Registrations Section (Req 7 & 8A) */}
+            <section className="admin-panel">
+              <div className="panel-head">
+                <div>
+                  <h2>Pending Student Registrations</h2>
+                  <p>Approve or reject newly registered @iitdh.ac.in student accounts</p>
+                </div>
+                <strong className="panel-count">{pendingRegistrations.length}</strong>
+              </div>
+              {pendingRegistrations.length > 0 ? (
+                <table>
+                  <thead>
+                    <tr><th>Student</th><th>College Email</th><th>Requested</th><th>Status</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    {pendingRegistrations.map((req) => (
+                      <tr key={req.request_id}>
+                        <td><strong>{req.user_name}</strong></td>
+                        <td>{req.user_email}</td>
+                        <td>{new Date(req.created_at).toLocaleString("en-IN")}</td>
+                        <td><StatusBadge tone="amber">Pending Approval</StatusBadge></td>
+                        <td>
+                          <div className="table-actions">
+                            <button
+                              className="table-view"
+                              onClick={async () => {
+                                try {
+                                  await decideAdminRegistration(req.user_id, "approve", "Approved by administrator");
+                                  setAdminBanner(`Approved registration for ${req.user_email}.`);
+                                  await loadAdminData();
+                                } catch (err) {
+                                  window.alert(err instanceof Error ? err.message : "Approval failed");
+                                }
+                              }}
+                            >
+                              Approve
+                            </button>
+                            <button
+                              className="table-delete"
+                              onClick={async () => {
+                                try {
+                                  await decideAdminRegistration(req.user_id, "reject", "Rejected by administrator");
+                                  setAdminBanner(`Rejected registration for ${req.user_email}.`);
+                                  await loadAdminData();
+                                } catch (err) {
+                                  window.alert(err instanceof Error ? err.message : "Rejection failed");
+                                }
+                              }}
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="admin-empty">No pending registration requests.</div>
+              )}
+            </section>
+
+            {/* Account Deactivation Requests Section (Req 6 & 8A) */}
+            <section className="admin-panel">
+              <div className="panel-head">
+                <div>
+                  <h2>Account Deactivation Requests</h2>
+                  <p>Verify no unresolved offers or sales exist before approving deactivation</p>
+                </div>
+                <strong className="panel-count">{deactivationReqs.length}</strong>
+              </div>
+              {deactivationReqs.length > 0 ? (
+                <table>
+                  <thead>
+                    <tr><th>Student</th><th>Reason</th><th>Obligation Check</th><th>Status</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    {deactivationReqs.map((req) => (
+                      <tr key={req.request_id}>
+                        <td>
+                          <strong>{req.user_name}</strong>
+                          <div className="muted" style={{ fontSize: 13 }}>{req.user_email}</div>
+                        </td>
+                        <td>{req.reason || "No reason provided"}</td>
+                        <td>
+                          {req.blocking_reasons.length > 0 ? (
+                            <div style={{ color: "#b91c1c", fontSize: 13 }}>
+                              <strong>Blocked:</strong> {req.blocking_reasons.join(" ")}
+                            </div>
+                          ) : (
+                            <span style={{ color: "#15803d", fontSize: 13 }}>No unresolved transactions</span>
+                          )}
+                        </td>
+                        <td>
+                          <StatusBadge tone={req.status === "approved" ? "green" : req.status === "pending" ? "amber" : "slate"}>
+                            {req.status}
+                          </StatusBadge>
+                        </td>
+                        <td>
+                          {req.status === "pending" && (
+                            <div className="table-actions">
+                              <button
+                                className="table-view"
+                                disabled={req.blocking_reasons.length > 0}
+                                title={req.blocking_reasons.length > 0 ? req.blocking_reasons.join(" ") : "Approve deactivation"}
+                                onClick={async () => {
+                                  try {
+                                    await decideAdminDeactivationRequest(req.request_id, "approve", "Deactivation approved");
+                                    setAdminBanner(`Approved deactivation for ${req.user_email}.`);
+                                    await loadAdminData();
+                                    await refreshMarketplace();
+                                  } catch (err) {
+                                    window.alert(err instanceof Error ? err.message : "Could not approve deactivation");
+                                  }
+                                }}
+                              >
+                                Approve Deactivation
+                              </button>
+                              <button
+                                className="table-delete"
+                                onClick={async () => {
+                                  try {
+                                    await decideAdminDeactivationRequest(req.request_id, "reject", "Request rejected");
+                                    setAdminBanner(`Rejected deactivation request for ${req.user_email}.`);
+                                    await loadAdminData();
+                                  } catch (err) {
+                                    window.alert(err instanceof Error ? err.message : "Could not reject request");
+                                  }
+                                }}
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="admin-empty">No account deactivation requests submitted.</div>
+              )}
+            </section>
+
+            {/* Registered Users Section */}
+            <section className="admin-panel">
+              <div className="panel-head">
+                <div>
+                  <h2>Registered users</h2>
+                  <p>{filteredUsers.length} matching accounts</p>
+                </div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <input
+                    placeholder="Search name or email…"
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    style={{ padding: "8px 12px", border: "1px solid var(--line)", borderRadius: 8 }}
+                  />
+                  <select
+                    value={userStatusFilter}
+                    onChange={(e) => setUserStatusFilter(e.target.value)}
+                    style={{ padding: "8px 12px", border: "1px solid var(--line)", borderRadius: 8 }}
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="active">Active</option>
+                    <option value="pending">Pending</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+              {filteredUsers.length > 0 ? (
+                <table>
+                  <thead>
+                    <tr><th>User</th><th>College email</th><th>Registered</th><th>Status</th><th>Action</th></tr>
+                  </thead>
+                  <tbody>
+                    {filteredUsers.map((user) => (
+                      <tr key={user.id}>
+                        <td><button className="table-user-link" onClick={() => setSelectedUserId(user.id)}>{user.name}</button></td>
+                        <td>{user.email}</td>
+                        <td>{user.joined}</td>
+                        <td>
+                          <StatusBadge tone={user.status === "active" ? "green" : user.status === "pending" ? "amber" : "slate"}>
+                            {user.status}
+                          </StatusBadge>
+                        </td>
+                        <td>
+                          <div className="table-actions">
+                            <button className="table-view" onClick={() => setSelectedUserId(user.id)}>View activity</button>
+                            {user.role !== "admin" && user.status === "pending" && (
+                              <>
+                                <button
+                                  className="table-view"
+                                  onClick={async () => {
+                                    await decideAdminRegistration(user.id, "approve");
+                                    await loadAdminData();
+                                  }}
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  className="table-delete"
+                                  onClick={async () => {
+                                    await decideAdminRegistration(user.id, "reject");
+                                    await loadAdminData();
+                                  }}
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            )}
+                            {user.role !== "admin" && user.status === "active" && (
+                              <button
+                                className="table-delete"
+                                onClick={() => setDeleteTarget({ type: "user", id: user.id, label: user.name })}
+                              >
+                                <Trash2 size={14} /> Deactivate
+                              </button>
+                            )}
+                            {user.role !== "admin" && (user.status === "inactive" || user.status === "rejected") && (
+                              <button
+                                className="table-view"
+                                onClick={async () => {
+                                  try {
+                                    await updateAdminUserStatus(user.id, "active");
+                                    await loadAdminData();
+                                  } catch (error) {
+                                    window.alert(error instanceof Error ? error.message : "Reactivation failed");
+                                  }
+                                }}
+                              >
+                                Reactivate
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="admin-empty">No matching user accounts.</div>
+              )}
+            </section>
+          </div>
         )}
 
         {view === "users" && selectedUser && (
           <div className="admin-detail-stack">
             <button className="panel-back" onClick={() => setSelectedUserId(null)}><ArrowLeft size={15} /> Back to all users</button>
             <section className="admin-panel user-summary-panel">
-              <div className="panel-head"><div><h2>{selectedUser.name}</h2><p>{selectedUser.email} · Joined {selectedUser.joined}</p></div><StatusBadge>{selectedUser.status}</StatusBadge></div>
+              <div className="panel-head">
+                <div><h2>{selectedUser.name}</h2><p>{selectedUser.email} · Joined {selectedUser.joined}</p></div>
+                <StatusBadge>{selectedUser.status}</StatusBadge>
+              </div>
             </section>
             {activityLoading && <div className="admin-panel">Loading real user activity...</div>}
             {activityError && <div className="notice" role="alert">{activityError}</div>}
             {userActivity && (
               <>
                 <section className="admin-panel">
-                  <div className="panel-head">
-                    <div>
-                      <h2>Account details</h2>
-                      <p>Verified database information</p>
-                    </div>
-                  </div>
+                  <div className="panel-head"><div><h2>Account details</h2><p>Verified database information</p></div></div>
                   <p>Phone: {userActivity.user.phone_no || "Not provided"}</p>
                   <p>Role: {userActivity.user.role}</p>
                   <p>Status: {userActivity.user.account_status}</p>
                 </section>
                 {([
-                  ["All listings", userActivity.listings.map(item => ({
-                    id: item.listing_id,
-                    title: item.title,
-                    amount: item.price,
-                    status: item.status,
-                  }))],
-                  ["Negotiations as seller", userActivity.seller_negotiations.map(item => ({
-                    id: item.offer_id,
-                    title: item.title,
-                    amount: item.offered_price,
-                    status: item.status,
-                  }))],
-                  ["Negotiations as buyer", userActivity.buyer_negotiations.map(item => ({
-                    id: item.offer_id,
-                    title: item.title,
-                    amount: item.offered_price,
-                    status: item.status,
-                  }))],
-                  ["Completed purchases", userActivity.completed_purchases.map(item => ({
-                    id: item.sale_id,
-                    title: item.title,
-                    amount: item.final_price,
-                    status: "Completed",
-                  }))],
-                  ["Sold items", userActivity.sold_items.map(item => ({
-                    id: item.sale_id,
-                    title: item.title,
-                    amount: item.final_price,
-                    status: "Sold",
-                  }))],
+                  ["All listings", userActivity.listings.map((item) => ({ id: item.listing_id, title: item.title, amount: item.price, status: item.status }))],
+                  ["Negotiations as seller", userActivity.seller_negotiations.map((item) => ({ id: item.offer_id, title: item.title, amount: item.offered_price, status: item.status }))],
+                  ["Negotiations as buyer", userActivity.buyer_negotiations.map((item) => ({ id: item.offer_id, title: item.title, amount: item.offered_price, status: item.status }))],
+                  ["Completed purchases", userActivity.completed_purchases.map((item) => ({ id: item.sale_id, title: item.title, amount: item.final_price, status: "Completed" }))],
+                  ["Sold items", userActivity.sold_items.map((item) => ({ id: item.sale_id, title: item.title, amount: item.final_price, status: "Sold" }))],
                 ] as const).map(([title, records]) => (
                   <section className="admin-panel" key={title}>
                     <div className="panel-head">
@@ -3747,11 +4270,9 @@ function AdminPage() {
                       <div className="admin-empty">No records found.</div>
                     ) : (
                       <table>
-                        <thead>
-                          <tr><th>Item</th><th>Amount</th><th>Status</th></tr>
-                        </thead>
+                        <thead><tr><th>Item</th><th>Amount</th><th>Status</th></tr></thead>
                         <tbody>
-                          {records.map(item => (
+                          {records.map((item) => (
                             <tr key={item.id}>
                               <td>{item.title}</td>
                               <td>₹{item.amount.toLocaleString("en-IN")}</td>
@@ -3770,23 +4291,191 @@ function AdminPage() {
 
         {view === "listings" && (
           <section className="admin-panel">
-            <div className="panel-head"><div><h2>Product listings</h2><p>{adminListings.length} available listings</p></div></div>
-            {adminListings.length > 0 ? <table><thead><tr><th>Listing</th><th>Category</th><th>Condition</th><th>Price</th><th>Action</th></tr></thead><tbody>{adminListings.map((product) => <tr key={product.id}><td><div className="table-product"><img src={product.image} alt="" /><strong>{product.title}</strong></div></td><td>{product.category}</td><td>{product.condition}</td><td>{product.price}</td><td><button className="table-delete" onClick={() => setDeleteTarget({ type: "listing", id: product.id, label: product.title })}><Trash2 size={14} /> Delete product</button></td></tr>)}</tbody></table> : <div className="admin-empty">No product listings remain.</div>}
+            <div className="panel-head">
+              <div>
+                <h2>Product listings</h2>
+                <p>{filteredListings.length} matching listings</p>
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <input
+                  placeholder="Search title, seller, category…"
+                  value={listingSearch}
+                  onChange={(e) => setListingSearch(e.target.value)}
+                  style={{ padding: "8px 12px", border: "1px solid var(--line)", borderRadius: 8 }}
+                />
+                <select
+                  value={listingStatusFilter}
+                  onChange={(e) => setListingStatusFilter(e.target.value)}
+                  style={{ padding: "8px 12px", border: "1px solid var(--line)", borderRadius: 8 }}
+                >
+                  <option value="all">All statuses</option>
+                  <option value="Available">Available</option>
+                  <option value="Reserved">Reserved</option>
+                  <option value="Sold">Sold</option>
+                </select>
+              </div>
+            </div>
+            {filteredListings.length > 0 ? (
+              <table>
+                <thead>
+                  <tr><th>Listing</th><th>Seller</th><th>Category</th><th>Price</th><th>Status</th><th>Created</th><th>Action</th></tr>
+                </thead>
+                <tbody>
+                  {filteredListings.map((product) => (
+                    <tr key={product.id}>
+                      <td><div className="table-product"><img src={product.image} alt="" /><strong>{product.title}</strong></div></td>
+                      <td>{product.sellerName ?? "Campus Seller"}</td>
+                      <td>{product.category}</td>
+                      <td>{product.price}</td>
+                      <td>
+                        <StatusBadge tone={product.status === "Available" ? "green" : product.status === "Reserved" ? "amber" : "slate"}>
+                          {product.status ?? "Available"}
+                        </StatusBadge>
+                      </td>
+                      <td>{product.createdAt ? new Date(product.createdAt).toLocaleDateString("en-IN") : "—"}</td>
+                      <td>
+                        {product.status === "Available" ? (
+                          <button
+                            className="table-delete"
+                            onClick={() => setDeleteTarget({ type: "listing", id: product.id, label: product.title })}
+                          >
+                            <Trash2 size={14} /> Remove
+                          </button>
+                        ) : (
+                          <span className="muted" style={{ fontSize: 13 }}>Protected ({product.status})</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="admin-empty">No matching product listings.</div>
+            )}
           </section>
         )}
 
         {view === "categories" && !selectedCategory && (
-          <section className="admin-panel category-admin-panel">
-            <div className="panel-head"><div><h2>Marketplace categories</h2><p>{adminCategories.length} active categories</p></div></div>
-            <div className="admin-category-grid">{adminCategories.map((category) => <div className="admin-category-card" key={category}><button className="admin-category-open" onClick={() => setSelectedCategory(category)}><span><Tag size={18} /></span><div><strong>{category}</strong><p>{adminListings.filter((listing) => listing.category === category).length} listings</p></div></button></div>)}</div>
-            {adminCategories.length === 0 && <div className="admin-empty">No marketplace categories remain.</div>}
-          </section>
+          <div className="admin-detail-stack">
+            <section className="admin-panel">
+              <div className="panel-head">
+                <div><h2>Create or edit category</h2><p>Manage product categories available to student sellers</p></div>
+              </div>
+              <form
+                style={{ display: "flex", gap: 10, alignItems: "center" }}
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!newCategoryName.trim()) return;
+                  try {
+                    await createAdminCategory(newCategoryName.trim());
+                    setNewCategoryName("");
+                    setAdminBanner("Category created.");
+                    await loadAdminData();
+                    await refreshMarketplace();
+                  } catch (err) {
+                    window.alert(err instanceof Error ? err.message : "Could not create category");
+                  }
+                }}
+              >
+                <input
+                  required
+                  placeholder="New category name…"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  style={{ padding: "10px 12px", border: "1px solid var(--line)", borderRadius: 8, flex: 1 }}
+                />
+                <Button type="submit">Add Category</Button>
+              </form>
+            </section>
+
+            <section className="admin-panel category-admin-panel">
+              <div className="panel-head"><div><h2>Marketplace categories</h2><p>{adminCategories.length} active categories</p></div></div>
+              <table>
+                <thead>
+                  <tr><th>Category Name</th><th>Listings</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                  {adminCategories.map((cat) => {
+                    const count = adminListings.filter((l) => l.category === cat.category_name).length;
+                    return (
+                      <tr key={cat.category_id}>
+                        <td>
+                          {editingCat?.id === cat.category_id ? (
+                            <input
+                              value={editingCat.name}
+                              onChange={(e) => setEditingCat({ id: cat.category_id, name: e.target.value })}
+                              style={{ padding: "6px 10px", border: "1px solid var(--line)", borderRadius: 6 }}
+                            />
+                          ) : (
+                            <button className="table-user-link" onClick={() => setSelectedCategory(cat.category_name)}>
+                              <strong>{cat.category_name}</strong>
+                            </button>
+                          )}
+                        </td>
+                        <td>{count} listings</td>
+                        <td>
+                          <div className="table-actions">
+                            <button className="table-view" onClick={() => setSelectedCategory(cat.category_name)}>
+                              View listings
+                            </button>
+                            {editingCat?.id === cat.category_id ? (
+                              <>
+                                <button
+                                  className="table-view"
+                                  onClick={async () => {
+                                    try {
+                                      await updateAdminCategory(cat.category_id, editingCat.name);
+                                      setEditingCat(null);
+                                      setAdminBanner("Category updated.");
+                                      await loadAdminData();
+                                      await refreshMarketplace();
+                                    } catch (err) {
+                                      window.alert(err instanceof Error ? err.message : "Update failed");
+                                    }
+                                  }}
+                                >
+                                  Save
+                                </button>
+                                <button className="table-delete" onClick={() => setEditingCat(null)}>Cancel</button>
+                              </>
+                            ) : (
+                              <button
+                                className="table-view"
+                                onClick={() => setEditingCat({ id: cat.category_id, name: cat.category_name })}
+                              >
+                                Rename
+                              </button>
+                            )}
+                            <button
+                              className="table-delete"
+                              disabled={count > 0}
+                              title={count > 0 ? "Cannot delete category linked to existing listings" : "Delete category"}
+                              onClick={() => setDeleteTarget({ type: "category", id: cat.category_id, label: cat.category_name })}
+                            >
+                              <Trash2 size={14} /> Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </section>
+          </div>
         )}
 
         {view === "categories" && selectedCategory && (
           <div className="admin-detail-stack">
             <button className="panel-back" onClick={() => setSelectedCategory(null)}><ArrowLeft size={15} /> Back to all categories</button>
-            <AdminProductTable title={`${selectedCategory} listings`} copy={`All products currently assigned to ${selectedCategory}.`} items={categoryListings} status="Available" tone="green" onDelete={(product) => setDeleteTarget({ type: "listing", id: product.id, label: product.title })} />
+            <AdminProductTable
+              title={`${selectedCategory} listings`}
+              copy={`All products currently assigned to ${selectedCategory}.`}
+              items={categoryListings}
+              status="Available"
+              tone="green"
+              onDelete={(product) => setDeleteTarget({ type: "listing", id: product.id, label: product.title })}
+            />
           </div>
         )}
 
@@ -3795,69 +4484,121 @@ function AdminPage() {
             <div className="panel-head">
               <div>
                 <h2>Student inquiries &amp; reports</h2>
-                <p>{contactMessages.length} submitted {contactMessages.length === 1 ? "message" : "messages"}</p>
+                <p>{filteredMessages.length} matching {filteredMessages.length === 1 ? "message" : "messages"}</p>
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <select
+                  value={msgCategoryFilter}
+                  onChange={(e) => setMsgCategoryFilter(e.target.value)}
+                  style={{ padding: "8px 12px", border: "1px solid var(--line)", borderRadius: 8 }}
+                >
+                  <option value="all">All categories</option>
+                  <option value="General Inquiry">General Inquiry</option>
+                  <option value="Account Issue">Account Issue</option>
+                  <option value="Listing Report">Listing Report</option>
+                  <option value="Deactivation Request">Deactivation Request</option>
+                </select>
+                <select
+                  value={msgStatusFilter}
+                  onChange={(e) => setMsgStatusFilter(e.target.value)}
+                  style={{ padding: "8px 12px", border: "1px solid var(--line)", borderRadius: 8 }}
+                >
+                  <option value="all">All statuses</option>
+                  <option value="new">New</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="resolved">Resolved</option>
+                </select>
               </div>
             </div>
-            {contactMessages.length > 0 ? (
+            {filteredMessages.length > 0 ? (
               <table>
                 <thead>
                   <tr>
                     <th>Sender</th>
+                    <th>Category</th>
                     <th>Subject &amp; Message</th>
                     <th>Listing</th>
                     <th>Status</th>
-                    <th>Action</th>
+                    <th>Admin Response &amp; Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {contactMessages.map((msg) => (
+                  {filteredMessages.map((msg) => (
                     <tr key={msg.message_id}>
                       <td>
                         <strong>{msg.sender_name}</strong>
-                        <div className="muted" style={{ fontSize: 12 }}>{msg.sender_email}</div>
+                        <div className="muted" style={{ fontSize: 13 }}>{msg.sender_email}</div>
                       </td>
+                      <td><StatusBadge tone="slate">{msg.category || "General Inquiry"}</StatusBadge></td>
                       <td>
                         <strong>{msg.subject}</strong>
-                        <p style={{ margin: "4px 0 0", fontSize: 13 }}>{msg.message}</p>
+                        <p style={{ margin: "4px 0 0", fontSize: 14 }}>{msg.message}</p>
+                        {msg.admin_reply && (
+                          <div className="muted" style={{ marginTop: 6, fontSize: 13 }}>
+                            <strong>Reply:</strong> {msg.admin_reply}
+                          </div>
+                        )}
                       </td>
                       <td>{msg.listing_title ?? "—"}</td>
                       <td>
-                        <StatusBadge tone={msg.status === "resolved" ? "green" : msg.status === "reviewed" ? "blue" : "amber"}>
-                          {msg.status}
+                        <StatusBadge tone={msg.status === "resolved" ? "green" : msg.status === "in_progress" ? "blue" : "amber"}>
+                          {msg.status === "in_progress" ? "In Progress" : msg.status === "resolved" ? "Resolved" : "New"}
                         </StatusBadge>
                       </td>
                       <td>
-                        <div className="table-actions">
-                          {msg.status !== "reviewed" && (
-                            <button
-                              className="table-view"
-                              onClick={async () => {
-                                try {
-                                  const updated = await updateContactMessageStatus(msg.message_id, "reviewed");
-                                  setContactMessages((prev) => prev.map((m) => (m.message_id === msg.message_id ? updated : m)));
-                                } catch (err) {
-                                  window.alert(err instanceof Error ? err.message : "Failed to update status");
-                                }
-                              }}
-                            >
-                              Mark reviewed
-                            </button>
-                          )}
-                          {msg.status !== "resolved" && (
-                            <button
-                              className="table-view"
-                              onClick={async () => {
-                                try {
-                                  const updated = await updateContactMessageStatus(msg.message_id, "resolved");
-                                  setContactMessages((prev) => prev.map((m) => (m.message_id === msg.message_id ? updated : m)));
-                                } catch (err) {
-                                  window.alert(err instanceof Error ? err.message : "Failed to update status");
-                                }
-                              }}
-                            >
-                              Resolve
-                            </button>
-                          )}
+                        <div style={{ display: "grid", gap: 6 }}>
+                          <input
+                            placeholder="Write admin reply…"
+                            value={replyDrafts[msg.message_id] ?? msg.admin_reply ?? ""}
+                            onChange={(e) =>
+                              setReplyDrafts((prev) => ({ ...prev, [msg.message_id]: e.target.value }))
+                            }
+                            style={{ padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 13 }}
+                          />
+                          <div className="table-actions">
+                            {msg.status !== "in_progress" && (
+                              <button
+                                className="table-view"
+                                onClick={async () => {
+                                  try {
+                                    const updated = await updateContactMessageStatus(
+                                      msg.message_id,
+                                      "in_progress",
+                                      replyDrafts[msg.message_id] ?? msg.admin_reply,
+                                    );
+                                    setContactMessages((prev) =>
+                                      prev.map((m) => (m.message_id === msg.message_id ? updated : m)),
+                                    );
+                                  } catch (err) {
+                                    window.alert(err instanceof Error ? err.message : "Failed to update status");
+                                  }
+                                }}
+                              >
+                                In Progress
+                              </button>
+                            )}
+                            {msg.status !== "resolved" && (
+                              <button
+                                className="table-view"
+                                onClick={async () => {
+                                  try {
+                                    const updated = await updateContactMessageStatus(
+                                      msg.message_id,
+                                      "resolved",
+                                      replyDrafts[msg.message_id] ?? msg.admin_reply,
+                                    );
+                                    setContactMessages((prev) =>
+                                      prev.map((m) => (m.message_id === msg.message_id ? updated : m)),
+                                    );
+                                  } catch (err) {
+                                    window.alert(err instanceof Error ? err.message : "Failed to update status");
+                                  }
+                                }}
+                              >
+                                Resolve
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -3865,7 +4606,7 @@ function AdminPage() {
                 </tbody>
               </table>
             ) : (
-              <div className="admin-empty">No contact messages submitted yet.</div>
+              <div className="admin-empty">No contact messages match the selected filter.</div>
             )}
           </section>
         )}
@@ -3876,10 +4617,18 @@ function AdminPage() {
           <div className="modal">
             <button className="modal-close" onClick={() => setDeleteTarget(null)}><X /></button>
             <span className="modal-icon logout-icon"><Trash2 /></span>
-            <h2>{deleteTarget.type === "user" ? "Deactivate account?" : deleteTarget.type === "listing" ? "Remove listing?" : "Delete category?"}</h2>
-            <p><strong>{deleteTarget.label}</strong> will be updated in MySQL. The record will be preserved.</p>
-            {deleteTarget.type === "category" && <div className="notice"><CircleHelp size={18} /><span>Deleting a category does not automatically delete its existing product listings.</span></div>}
-            <div className="modal-actions"><Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button><Button variant="danger" onClick={confirmDelete}>Confirm action</Button></div>
+            <h2>
+              {deleteTarget.type === "user"
+                ? "Deactivate account?"
+                : deleteTarget.type === "listing"
+                  ? "Remove listing?"
+                  : "Delete category?"}
+            </h2>
+            <p><strong>{deleteTarget.label}</strong> will be updated in MySQL. Historical transaction records remain preserved.</p>
+            <div className="modal-actions">
+              <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+              <Button variant="danger" onClick={() => void confirmDelete()}>Confirm action</Button>
+            </div>
           </div>
         </div>
       )}
@@ -3891,6 +4640,9 @@ function ContactAdminPage() {
   const products = useProducts();
   const location = useLocation();
   const initialListingId = new URLSearchParams(location.search).get("listing_id") ?? "";
+  const [category, setCategory] = useState<
+    "General Inquiry" | "Account Issue" | "Listing Report" | "Deactivation Request"
+  >(initialListingId ? "Listing Report" : "General Inquiry");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [listingId, setListingId] = useState(initialListingId);
@@ -3912,6 +4664,7 @@ function ContactAdminPage() {
     setSubmitSuccess(false);
     try {
       const created = await submitContactMessage({
+        category,
         subject,
         message,
         listing_id: listingId ? Number(listingId) : null,
@@ -3931,16 +4684,23 @@ function ContactAdminPage() {
   return (
     <>
       <PageHero
-        eyebrow="Support & moderation"
+        eyebrow="Help Centre & Support"
         title="Contact Campus Admin"
-        copy="Report a listing issue, ask a marketplace question, or reach the IIT DH administrator."
+        copy="Submit an inquiry, report a listing, or contact the IIT Dharwad PeerMart administrator (testadmin63@iitdh.ac.in)."
       />
-      <section className="container content-section" style={{ maxWidth: 760 }}>
+      <section className="container content-section" style={{ maxWidth: 820 }}>
         <form className="admin-panel" onSubmit={(e) => void handleSubmit(e)} style={{ display: "grid", gap: 16 }}>
+          <div className="contact-box" style={{ margin: 0 }}>
+            <Mail size={19} />
+            <div>
+              <small>Official Campus Administrator Email</small>
+              <strong>testadmin63@iitdh.ac.in</strong>
+            </div>
+          </div>
           {submitSuccess && (
             <div className="notice" role="status">
               <Check size={18} />
-              <span>Your message has been sent to the campus administrator.</span>
+              <span>Your inquiry has been submitted to the campus administrator (testadmin63@iitdh.ac.in).</span>
             </div>
           )}
           {submitError && (
@@ -3949,6 +4709,45 @@ function ContactAdminPage() {
               <span>{submitError}</span>
             </div>
           )}
+          <div className="form-row">
+            <label className="field">
+              <span>Inquiry Category</span>
+              <div className="select-wrap">
+                <select
+                  value={category}
+                  onChange={(e) =>
+                    setCategory(
+                      e.target.value as
+                        | "General Inquiry"
+                        | "Account Issue"
+                        | "Listing Report"
+                        | "Deactivation Request",
+                    )
+                  }
+                >
+                  <option value="General Inquiry">General Inquiry</option>
+                  <option value="Account Issue">Account Issue</option>
+                  <option value="Listing Report">Listing Report</option>
+                  <option value="Deactivation Request">Deactivation Request</option>
+                </select>
+                <ChevronDown size={16} />
+              </div>
+            </label>
+            <label className="field">
+              <span>Related listing (optional)</span>
+              <div className="select-wrap">
+                <select value={listingId} onChange={(e) => setListingId(e.target.value)}>
+                  <option value="">None — general inquiry</option>
+                  {products.map((item) => (
+                    <option key={item.id} value={String(item.id)}>
+                      #{item.id} — {item.title} ({item.price})
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={16} />
+              </div>
+            </label>
+          </div>
           <label className="field">
             <span>Subject</span>
             <input
@@ -3959,20 +4758,6 @@ function ContactAdminPage() {
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
             />
-          </label>
-          <label className="field">
-            <span>Related listing (optional)</span>
-            <div className="select-wrap">
-              <select value={listingId} onChange={(e) => setListingId(e.target.value)}>
-                <option value="">None — general inquiry</option>
-                {products.map((item) => (
-                  <option key={item.id} value={String(item.id)}>
-                    #{item.id} — {item.title} ({item.price})
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={16} />
-            </div>
           </label>
           <label className="field">
             <span>Message</span>
@@ -3997,14 +4782,15 @@ function ContactAdminPage() {
           <section className="admin-panel" style={{ marginTop: 28 }}>
             <div className="panel-head">
               <div>
-                <h2>Your recent messages</h2>
-                <p>{myMessages.length} submitted</p>
+                <h2>Your submitted inquiries</h2>
+                <p>{myMessages.length} recorded in MySQL</p>
               </div>
             </div>
             <table>
               <thead>
                 <tr>
-                  <th>Subject</th>
+                  <th>Category</th>
+                  <th>Subject &amp; Admin Reply</th>
                   <th>Listing</th>
                   <th>Status</th>
                 </tr>
@@ -4012,14 +4798,20 @@ function ContactAdminPage() {
               <tbody>
                 {myMessages.map((msg) => (
                   <tr key={msg.message_id}>
+                    <td>{msg.category || "General Inquiry"}</td>
                     <td>
                       <strong>{msg.subject}</strong>
                       <div className="muted" style={{ fontSize: 13 }}>{msg.message}</div>
+                      {msg.admin_reply && (
+                        <div style={{ marginTop: 6, fontSize: 13, color: "var(--navy)" }}>
+                          <strong>Admin Reply:</strong> {msg.admin_reply}
+                        </div>
+                      )}
                     </td>
                     <td>{msg.listing_title ?? "—"}</td>
                     <td>
-                      <StatusBadge tone={msg.status === "resolved" ? "green" : msg.status === "reviewed" ? "blue" : "amber"}>
-                        {msg.status}
+                      <StatusBadge tone={msg.status === "resolved" ? "green" : msg.status === "in_progress" ? "blue" : "amber"}>
+                        {msg.status === "in_progress" ? "In Progress" : msg.status === "resolved" ? "Resolved" : "New"}
                       </StatusBadge>
                     </td>
                   </tr>
@@ -4034,8 +4826,57 @@ function ContactAdminPage() {
 }
 
 function TermsPage() {
-  const sections = ["Eligibility & campus rules", "Accurate product descriptions", "Prohibited & fraudulent listings", "Buyer responsibilities", "Seller responsibilities", "Offline negotiation & handover", "Reservations & availability", "Recording completed sales", "Warnings & account restrictions", "Privacy & contact"];
-  return <><PageHero eyebrow="Last updated · February 2026" title="Terms & Conditions" copy="Plain-language rules for using PeerMart responsibly and safely." ><Button variant="outline" icon={<Download size={16} />}>Download PDF</Button></PageHero><section className="container terms-layout"><aside><strong>On this page</strong>{sections.map((s, i) => <a href={`#term-${i}`} key={s}>{i + 1}. {s}</a>)}</aside><article className="terms-content"><div className="terms-intro"><ShieldCheck /><p>PeerMart is a campus marketplace that helps students discover listings and contact one another. PeerMart does not process payments or guarantee offline transactions.</p></div>{sections.map((s, i) => <section id={`term-${i}`} key={s}><span>0{i + 1}</span><div><h2>{s}</h2><p>Users must act honestly, follow applicable campus policies, and communicate respectfully. Details supplied in listings and negotiations should be accurate and complete.</p>{i === 5 && <p>Buyers and sellers agree on price, meeting location, payment, and handover directly. Choose a safe public campus location and inspect the item before completing the deal.</p>}{i === 9 && <p>Administrator contact: <strong>admin@iitdh.ac.in</strong>.</p>}</div></section>)}</article></section></>;
+  const sections = [
+    "Eligibility & admin-approved registration",
+    "Accurate product descriptions & 2–5 photos",
+    "Prohibited & fraudulent listings",
+    "Buyer responsibilities & offer rules",
+    "Seller email privacy & negotiation",
+    "Demo payment gateway & receipt generation",
+    "Reservations, competing offers & availability",
+    "Listing deletion restrictions",
+    "Account deactivation & data protection",
+    "Administrator contact (testadmin63@iitdh.ac.in)",
+  ];
+  return (
+    <>
+      <PageHero eyebrow="Last updated · November 2026" title="Terms, Conditions & Privacy Policy" copy="Plain-language rules and data-protection guidelines for using PeerMart responsibly and safely.">
+        <Button variant="outline" icon={<Download size={16} />} onClick={() => window.print()}>Print / Save PDF</Button>
+      </PageHero>
+      <section className="container terms-layout">
+        <aside>
+          <strong>On this page</strong>
+          {sections.map((s, i) => (
+            <a href={`#term-${i}`} key={s}>{i + 1}. {s}</a>
+          ))}
+        </aside>
+        <article className="terms-content">
+          <div className="terms-intro">
+            <ShieldCheck />
+            <p>PeerMart is an academic campus marketplace at IIT Dharwad. All payments are simulated via the Demo Payment Gateway; no real money is transferred.</p>
+          </div>
+          {sections.map((s, i) => (
+            <section id={`term-${i}`} key={s}>
+              <span>0{i + 1}</span>
+              <div>
+                <h2>{s}</h2>
+                <p>Users must act honestly, follow IIT Dharwad campus policies, and supply accurate product details.</p>
+                {i === 4 && (
+                  <p>Seller email addresses are never exposed on public listings or AI search results. A seller’s verified @iitdh.ac.in email is revealed only after an authenticated buyer submits a valid offer on that specific listing.</p>
+                )}
+                {i === 8 && (
+                  <p>In accordance with data-protection principles (DPDP Act 2023), PeerMart collects only name, college email, and phone number. Users may submit an Account Deactivation Request; once approved by the administrator after verifying no unresolved transactions exist, non-essential personal fields are anonymized while preserving required transaction audit records.</p>
+                )}
+                {i === 9 && (
+                  <p>Administrator contact: <strong>testadmin63@iitdh.ac.in</strong>.</p>
+                )}
+              </div>
+            </section>
+          ))}
+        </article>
+      </section>
+    </>
+  );
 }
 
 export const router = createBrowserRouter([
@@ -4061,7 +4902,7 @@ export const router = createBrowserRouter([
       { path: "admin", Component: ProtectedAdminPage },
       { path: "terms", Component: TermsPage },
       { path: "contact-admin", element: <ProtectedRoute><ContactAdminPage /></ProtectedRoute> },
-      { path: "*", element: <PageHero title="Page not found" copy="This campus path doesn’t exist yet." ><Link className="btn btn-primary" to="/">Back home</Link></PageHero> },
+      { path: "*", element: <PageHero title="Page not found" copy="This campus path doesn’t exist yet."><Link className="btn btn-primary" to="/">Back home</Link></PageHero> },
     ],
   },
 ]);

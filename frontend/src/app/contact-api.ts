@@ -5,10 +5,14 @@ export interface ContactMessage {
   sender_email: string;
   listing_id: number | null;
   listing_title: string | null;
+  category: string;
   subject: string;
   message: string;
-  status: "open" | "reviewed" | "resolved" | string;
+  status: "new" | "in_progress" | "resolved" | string;
+  admin_reply?: string | null;
+  reviewed_by?: number | null;
   created_at: string;
+  updated_at?: string | null;
 }
 
 export interface ContactMessageListResponse {
@@ -46,6 +50,7 @@ async function contactRequest<T>(
 }
 
 export function submitContactMessage(payload: {
+  category?: "General Inquiry" | "Account Issue" | "Listing Report" | "Deactivation Request";
   subject: string;
   message: string;
   listing_id?: number | null;
@@ -53,6 +58,7 @@ export function submitContactMessage(payload: {
   return contactRequest<ContactMessage>("/api/contact-messages", {
     method: "POST",
     body: JSON.stringify({
+      category: payload.category ?? "General Inquiry",
       subject: payload.subject,
       message: payload.message,
       listing_id: payload.listing_id ?? null,
@@ -72,13 +78,17 @@ export function getAdminContactMessages(): Promise<ContactMessageListResponse> {
 
 export function updateContactMessageStatus(
   messageId: number,
-  status: "open" | "reviewed" | "resolved",
+  status: "new" | "in_progress" | "resolved",
+  adminReply?: string | null,
 ): Promise<ContactMessage> {
   return contactRequest<ContactMessage>(
     `/api/admin/contact-messages/${messageId}/status`,
     {
       method: "PATCH",
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({
+        status,
+        admin_reply: adminReply ?? null,
+      }),
     },
   );
 }

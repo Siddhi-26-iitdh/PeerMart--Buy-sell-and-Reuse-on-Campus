@@ -18,7 +18,7 @@ def _create_users_and_listing(db_session):
     admin = User(
         f_name="Campus",
         l_name="Admin",
-        email="admin@iitdh.ac.in",
+        email="testadmin63@iitdh.ac.in",
         password_hash=hash_password("AdminPass123!"),
         role="admin",
         account_status="active",
@@ -61,6 +61,7 @@ def test_contact_admin_submit_and_admin_workflow(client, db_session):
     bad_listing = client.post(
         "/api/contact-messages",
         json={
+            "category": "Listing Report",
             "subject": "Missing item",
             "message": "Listing ID does not exist",
             "listing_id": 99999,
@@ -71,6 +72,7 @@ def test_contact_admin_submit_and_admin_workflow(client, db_session):
     created = client.post(
         "/api/contact-messages",
         json={
+            "category": "Listing Report",
             "subject": "Question about listing",
             "message": "Is this listing still verified on campus?",
             "listing_id": listing.listing_id,
@@ -78,9 +80,10 @@ def test_contact_admin_submit_and_admin_workflow(client, db_session):
     )
     assert created.status_code == 201
     created_data = created.json()
+    assert created_data["category"] == "Listing Report"
     assert created_data["listing_id"] == listing.listing_id
     assert created_data["listing_title"] == "Algorithms Textbook"
-    assert created_data["status"] == "open"
+    assert created_data["status"] == "new"
 
     my_msgs = client.get("/api/contact-messages/me")
     assert my_msgs.status_code == 200
@@ -95,14 +98,23 @@ def test_contact_admin_submit_and_admin_workflow(client, db_session):
     )
     assert admin_login.status_code == 200
 
-    admin_list = client.get("/api/admin/contact-messages")
+    admin_list = client.get("/api/admin/contact-messages?status=new&category=Listing%20Report")
     assert admin_list.status_code == 200
     assert admin_list.json()["total"] == 1
 
     msg_id = created_data["message_id"]
+    in_prog = client.patch(
+        f"/api/admin/contact-messages/{msg_id}/status",
+        json={"status": "in_progress", "admin_reply": "Checking with the seller."},
+    )
+    assert in_prog.status_code == 200
+    assert in_prog.json()["status"] == "in_progress"
+    assert in_prog.json()["admin_reply"] == "Checking with the seller."
+
     updated = client.patch(
         f"/api/admin/contact-messages/{msg_id}/status",
-        json={"status": "resolved"},
+        json={"status": "resolved", "admin_reply": "Verified listing details on campus."},
     )
     assert updated.status_code == 200
     assert updated.json()["status"] == "resolved"
+    assert updated.json()["admin_reply"] == "Verified listing details on campus."

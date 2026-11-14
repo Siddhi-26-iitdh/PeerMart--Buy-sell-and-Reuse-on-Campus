@@ -154,12 +154,9 @@ CATEGORY_ALIASES: dict[str, tuple[str, ...]] = {
     ),
 }
 
-# Generic words that restate a category rather than narrowing a specific item title
 GENERIC_CATEGORY_TERMS = {
     "book",
     "books",
-    "textbook",
-    "textbooks",
     "study",
     "material",
     "materials",
@@ -193,7 +190,7 @@ KEYWORD_SYNONYMS: dict[str, tuple[str, ...]] = {
     "bicycle": ("cycle", "bicycle", "bycycle"),
     "bicycles": ("cycle", "bicycle", "bycycle"),
     "bike": ("cycle", "bicycle", "bycycle"),
-    "textbook": ("book", "probability", "mathematics", "guide"),
+    "textbook": ("textbook", "textbooks"),
     "textbooks": ("book", "probability", "mathematics", "guide"),
     "books": ("book", "probability", "mathematics", "guide"),
     "book": ("book", "probability", "mathematics", "guide"),
@@ -203,10 +200,10 @@ KEYWORD_SYNONYMS: dict[str, tuple[str, ...]] = {
     "lights": ("light", "lamp"),
     "calculators": ("calculator", "casio"),
     "calculator": ("calculator", "casio"),
-    "headphones": ("headphone", "boat"),
-    "headphone": ("headphone", "boat"),
-    "earphones": ("headphone", "earphone"),
-    "earphone": ("headphone", "earphone"),
+    "headphones": ("headphone", "headphones", "boat"),
+    "headphone": ("headphone", "headphones", "boat"),
+    "earphones": ("headphone", "headphones", "earphone"),
+    "earphone": ("headphone", "headphones", "earphone"),
     "racquet": ("racquet", "racket", "badminton"),
     "racket": ("racquet", "racket", "badminton"),
     "bags": ("bag", "backpack"),
@@ -595,12 +592,40 @@ def _build_keyword_clause(terms: list[str]):
     return or_(*clauses)
 
 
+def _matches_word_boundaries(listing: Listing, keywords: list[str]) -> bool:
+    """Prevent substring false positives (e.g. 'cat' matching 'calculator' or 'applications')."""
+    if not keywords:
+        return True
+    haystack = " ".join(
+        part
+        for part in (
+            listing.title,
+            listing.description,
+            listing.brand or "",
+            listing.color or "",
+        )
+        if part
+    ).lower()
+    # Check each original keyword group
+    for kw in keywords:
+        stem = _singularize(kw.strip().lower())
+        syns = KEYWORD_SYNONYMS.get(kw.lower()) or KEYWORD_SYNONYMS.get(stem) or (stem, kw.lower())
+        for s in syns:
+            # Skip matching "CAT" (Common Admission Test) if user searched lowercase "cat" with non-book context like "big cat"
+            if s == "cat" and any(other in keywords for other in ("big", "pet", "animal", "kitten")):
+                continue
+            if re.search(rf"\b{re.escape(s)}", haystack):
+                return True
+    return False
+
+
 def search_listings_by_filters(
     db: Session,
     filters: AISearchFilters,
     limit: int = 50,
 ) -> list[Listing]:
-    base_conditions = [Listing.status != "removed"]
+    # Req 9 & 21: Only return non-removed/non-archived listings
+    base_conditions = [Listing.status.notin_(["removed", "archived"])]
 
     if filters.min_price is not None:
         base_conditions.append(Listing.price >= filters.min_price)
@@ -626,8 +651,9 @@ def search_listings_by_filters(
 
     # Stage 1: Category + specific keywords + price/condition
     if category_id is not None and specific_keywords:
-        stage1 = list(
-            db.scalars(
+        stage1 = [
+            item
+            for item in db.scalars(
                 select(Listing)
                 .where(
                     *base_conditions,
@@ -637,14 +663,16 @@ def search_listings_by_filters(
                 .order_by(Listing.created_at.desc(), Listing.listing_id.desc())
                 .limit(limit)
             ).all()
-        )
+            if _matches_word_boundaries(item, filters.keywords)
+        ]
         if stage1:
             return stage1
 
-    # Stage 2: Specific keywords across all categories (handles cross-category items like kettle/lamp/extension board)
+    # Stage 2: Specific keywords across all categories
     if specific_keywords:
-        stage2 = list(
-            db.scalars(
+        stage2 = [
+            item
+            for item in db.scalars(
                 select(Listing)
                 .where(
                     *base_conditions,
@@ -653,12 +681,13 @@ def search_listings_by_filters(
                 .order_by(Listing.created_at.desc(), Listing.listing_id.desc())
                 .limit(limit)
             ).all()
-        )
+            if _matches_word_boundaries(item, filters.keywords)
+        ]
         if stage2:
             return stage2
 
-    # Stage 3: Category + price/condition (when keywords were generic category words like "textbooks" or "books")
-    if category_id is not None:
+    # Stage 3: Category + price/condition (only when keywords were generic category words or empty)
+    if category_id is not None and not specific_keywords:
         return list(
             db.scalars(
                 select(Listing)
@@ -668,23 +697,29 @@ def search_listings_by_filters(
             ).all()
         )
 
-    # Stage 4: Any expanded keywords + price/condition
-    if all_keywords:
-        return list(
-            db.scalars(
+    # Stage 4: Any expanded keywords + price/condition with word-boundary check
+    if all_keywords and not specific_keywords:
+        return [
+            item
+            for item in db.scalars(
                 select(Listing)
                 .where(*base_conditions, _build_keyword_clause(all_keywords))
                 .order_by(Listing.created_at.desc(), Listing.listing_id.desc())
                 .limit(limit)
             ).all()
+            if _matches_word_boundaries(item, filters.keywords)
+        ]
+
+    # Stage 5: Only return price/condition-only matches when NO keywords and NO category were given
+    if not filters.keywords and category_id is None:
+        return list(
+            db.scalars(
+                select(Listing)
+                .where(*base_conditions)
+                .order_by(Listing.created_at.desc(), Listing.listing_id.desc())
+                .limit(limit)
+            ).all()
         )
 
-    # Stage 5: Price/condition only
-    return list(
-        db.scalars(
-            select(Listing)
-            .where(*base_conditions)
-            .order_by(Listing.created_at.desc(), Listing.listing_id.desc())
-            .limit(limit)
-        ).all()
-    )
+    # Req 9: Do not invent or return unrelated listings when no suitable product exists
+    return []

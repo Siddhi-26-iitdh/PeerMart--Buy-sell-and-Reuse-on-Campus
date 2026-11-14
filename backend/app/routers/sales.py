@@ -1,7 +1,7 @@
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -144,15 +144,33 @@ def _enrich_sales(db: Session, sales: list[Sale]) -> list[SaleDetailResponse]:
 def list_sales(
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=100),
+    current_user: User = Depends(require_current_user),
     db: Session = Depends(get_db),
 ):
-    total = db.scalar(select(func.count()).select_from(Sale)) or 0
-    items = db.scalars(
-        select(Sale)
-        .order_by(Sale.sale_id)
-        .offset((page - 1) * size)
-        .limit(size)
-    ).all()
+    if current_user.role == "admin":
+        total = db.scalar(select(func.count()).select_from(Sale)) or 0
+        items = db.scalars(
+            select(Sale)
+            .order_by(Sale.sale_id)
+            .offset((page - 1) * size)
+            .limit(size)
+        ).all()
+    else:
+        stmt = (
+            select(Sale)
+            .join(Offer, Sale.offer_id == Offer.offer_id)
+            .join(Listing, Offer.listing_id == Listing.listing_id)
+            .where(
+                or_(
+                    Offer.buyer_id == current_user.user_id,
+                    Listing.seller_id == current_user.user_id,
+                )
+            )
+        )
+        total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        items = db.scalars(
+            stmt.order_by(Sale.sale_id).offset((page - 1) * size).limit(size)
+        ).all()
 
     return {
         "items": items,
@@ -318,6 +336,7 @@ def download_sale_receipt(
 )
 def get_sale(
     item_id: int,
+    current_user: User = Depends(require_current_user),
     db: Session = Depends(get_db),
 ):
     item = db.get(Sale, item_id)
@@ -326,6 +345,18 @@ def get_sale(
         raise HTTPException(
             status_code=404,
             detail="Sale not found",
+        )
+
+    offer = db.get(Offer, item.offer_id)
+    listing = db.get(Listing, offer.listing_id) if offer else None
+    if (
+        current_user.role != "admin"
+        and (offer is None or offer.buyer_id != current_user.user_id)
+        and (listing is None or listing.seller_id != current_user.user_id)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to view this sale",
         )
 
     return item
@@ -341,12 +372,21 @@ def process_mock_payment(
     current_user: User = Depends(require_current_user),
     db: Session = Depends(get_db),
 ):
-    offer = db.get(Offer, payload.offer_id)
+    # Req 17: Lock offer and listing inside atomic transaction
+    offer = db.scalar(
+        select(Offer)
+        .where(Offer.offer_id == payload.offer_id)
+        .with_for_update()
+    )
     if offer is None:
         raise HTTPException(status_code=404, detail="Offer not found")
 
-    listing = db.get(Listing, offer.listing_id)
-    if listing is None or listing.status == "removed":
+    listing = db.scalar(
+        select(Listing)
+        .where(Listing.listing_id == offer.listing_id)
+        .with_for_update()
+    )
+    if listing is None or listing.status in ("removed", "archived"):
         raise HTTPException(status_code=404, detail="Listing not found")
 
     if offer.buyer_id != current_user.user_id:
@@ -358,13 +398,13 @@ def process_mock_payment(
     existing_sale = db.scalar(
         select(Sale).where(Sale.offer_id == offer.offer_id)
     )
-    if offer.status == "paid" or existing_sale is not None:
+    if offer.status in ("completed", "paid") or existing_sale is not None:
         raise HTTPException(
             status_code=409,
             detail="Payment has already been processed for this offer",
         )
 
-    if offer.status != "accepted":
+    if offer.status not in ("accepted", "payment_pending"):
         raise HTTPException(
             status_code=409,
             detail="Offer must be accepted by the seller before payment",
@@ -396,6 +436,12 @@ def process_mock_payment(
             receipt_number=None,
         )
         db.add(payment)
+
+        # Req 11: Release reservation safely when payment fails or is cancelled
+        if listing.status == "reserved":
+            listing.status = "available"
+        offer.status = "cancelled" if payload.outcome == "cancelled" else "pending"
+
         db.commit()
         db.refresh(payment)
         return MockPaymentResponse(
@@ -441,15 +487,16 @@ def process_mock_payment(
         )
         db.add(payment)
 
-        offer.status = "paid"
+        # Req 11 & 15: Mark accepted offer completed and listing sold
+        offer.status = "completed"
         listing.status = "sold"
 
-        # Reject any other remaining offers on this listing and remove from carts
+        # Req 11: Reject remaining pending offers only AFTER payment succeeds
         other_offers = db.scalars(
             select(Offer).where(
                 Offer.listing_id == listing.listing_id,
                 Offer.offer_id != offer.offer_id,
-                Offer.status.in_(["pending", "accepted"]),
+                Offer.status.in_(["pending", "accepted", "payment_pending"]),
             )
         ).all()
         for other in other_offers:
@@ -468,6 +515,9 @@ def process_mock_payment(
             status_code=409,
             detail="Payment or sale already processed",
         ) from exc
+    except Exception:
+        db.rollback()
+        raise
 
     return MockPaymentResponse(
         payment_id=payment.payment_id,
