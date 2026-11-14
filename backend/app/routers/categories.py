@@ -94,6 +94,38 @@ def create_category(
     return cat
 
 
+@router.patch(
+    "/{category_id}",
+    response_model=CategoryResponse,
+    dependencies=[Depends(require_admin)],
+)
+def update_category(
+    category_id: int,
+    payload: CategoryCreate,
+    db: Session = Depends(get_db),
+):
+    category = db.get(Category, category_id)
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    duplicate = db.scalar(
+        select(Category).where(
+            func.lower(Category.category_name) == payload.category_name.lower(),
+            Category.category_id != category_id,
+        )
+    )
+    if duplicate is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Another category with this name already exists",
+        )
+
+    category.category_name = payload.category_name
+    db.commit()
+    db.refresh(category)
+    return category
+
+
 @router.delete(
     "/{category_id}",
     dependencies=[Depends(require_admin)],

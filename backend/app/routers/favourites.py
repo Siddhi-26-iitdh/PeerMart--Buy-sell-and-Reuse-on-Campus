@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -18,15 +18,12 @@ router = APIRouter(prefix="/favourites", tags=["Favourite"])
 
 @router.get("", response_model=FavouriteListResponse)
 def list_favourites(
-    request: Request,
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=100),
+    current_user: User = Depends(require_current_user),
     db: Session = Depends(get_db),
 ):
-    filters = []
-    session_user_id = request.session.get("user_id") if hasattr(request, "session") else None
-    if session_user_id is not None:
-        filters.append(Favourite.user_id == session_user_id)
+    filters = [Favourite.user_id == current_user.user_id]
 
     total = db.scalar(select(func.count()).select_from(Favourite).where(*filters)) or 0
     items = db.scalars(
@@ -52,6 +49,7 @@ def list_favourites(
 )
 def get_favourite(
     item_id: int,
+    current_user: User = Depends(require_current_user),
     db: Session = Depends(get_db),
 ):
     item = db.get(Favourite, item_id)
@@ -60,6 +58,12 @@ def get_favourite(
         raise HTTPException(
             status_code=404,
             detail="Favourite not found",
+        )
+
+    if item.user_id != current_user.user_id and current_user.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to access another user's favourite",
         )
 
     return item
@@ -72,7 +76,7 @@ def create_favourite(
     db: Session = Depends(get_db),
 ):
     listing = db.get(Listing, payload.listing_id)
-    if listing is None or listing.status == "removed":
+    if listing is None or listing.status in ("removed", "archived"):
         raise HTTPException(status_code=404, detail="Listing not found")
 
     existing = db.scalar(

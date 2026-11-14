@@ -8,6 +8,7 @@ from app.auth_dependencies import require_current_user
 from app.database import get_db
 from app.models.cart_item import CartItem
 from app.models.category import Category
+from app.models.favourite import Favourite
 from app.models.listing import Listing
 from app.models.offer import Offer
 from app.models.user import User
@@ -17,8 +18,11 @@ from app.schemas.listing import (
     ListingResponse,
     ListingUpdate,
 )
+from app.services.state_machine import ACTIVE_OFFER_STATUSES
 
 router = APIRouter(prefix="/listings", tags=["Listings"])
+
+HIDDEN_LISTING_STATUSES = ("removed", "archived")
 
 
 def _enrich_listings(db: Session, listings: list[Listing]) -> list[ListingResponse]:
@@ -32,6 +36,7 @@ def _enrich_listings(db: Session, listings: list[Listing]) -> list[ListingRespon
     result: list[ListingResponse] = []
     for item in listings:
         resp = ListingResponse.model_validate(item)
+        # Req 1: Public listing responses expose seller_name only, never seller_email.
         resp.seller_name = sellers.get(item.seller_id)
         result.append(resp)
     return result
@@ -56,7 +61,7 @@ def list_listings(
             detail="min_price cannot exceed max_price",
         )
 
-    filters = [Listing.status != "removed"]
+    filters = [Listing.status.notin_(HIDDEN_LISTING_STATUSES)]
 
     if q is not None and q.strip():
         term = q.strip().lower()
@@ -122,7 +127,7 @@ def get_listing(
 ):
     listing = db.get(Listing, listing_id)
 
-    if listing is None or listing.status == "removed":
+    if listing is None or listing.status in HIDDEN_LISTING_STATUSES:
         raise HTTPException(
             status_code=404,
             detail="Listing not found",
@@ -167,7 +172,7 @@ def update_listing(
     db: Session = Depends(get_db),
 ):
     listing = db.get(Listing, listing_id)
-    if listing is None or listing.status == "removed":
+    if listing is None or listing.status in HIDDEN_LISTING_STATUSES:
         raise HTTPException(status_code=404, detail="Listing not found")
 
     if listing.seller_id != current_user.user_id and current_user.role != "admin":
@@ -200,8 +205,11 @@ def update_listing(
         listing.brand = payload.brand.strip() or None
     if payload.color is not None:
         listing.color = payload.color.strip() or None
-    if payload.status is not None:
-        listing.status = payload.status
+    if payload.status is not None and payload.status != listing.status:
+        raise HTTPException(
+            status_code=409,
+            detail="Listing status transitions are managed by offer and payment workflows",
+        )
 
     db.commit()
     db.refresh(listing)
@@ -215,7 +223,7 @@ def delete_listing(
     db: Session = Depends(get_db),
 ):
     listing = db.get(Listing, listing_id)
-    if listing is None or listing.status == "removed":
+    if listing is None or listing.status in HIDDEN_LISTING_STATUSES:
         raise HTTPException(status_code=404, detail="Listing not found")
 
     if listing.seller_id != current_user.user_id and current_user.role != "admin":
@@ -230,18 +238,29 @@ def delete_listing(
             detail="Cannot delete a completed sold listing",
         )
 
-    listing.status = "removed"
-
-    pending_offers = db.scalars(
-        select(Offer).where(
+    # Req 13: Block deletion when any active negotiation, accepted offer, or completed transaction exists.
+    active_offer = db.scalar(
+        select(Offer.offer_id)
+        .where(
             Offer.listing_id == listing_id,
-            Offer.status.in_(["pending", "accepted"]),
+            Offer.status.in_((*ACTIVE_OFFER_STATUSES, "completed", "paid")),
         )
-    ).all()
-    for off in pending_offers:
-        off.status = "rejected"
+        .limit(1)
+    )
+    if active_offer is not None or listing.status == "reserved":
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete a listing with active negotiations, accepted offers, or completed sales",
+        )
+
+    # Soft-archive if historical rejected/cancelled/expired offers exist; otherwise mark removed.
+    any_historical_offer = db.scalar(
+        select(Offer.offer_id).where(Offer.listing_id == listing_id).limit(1)
+    )
+    listing.status = "archived" if any_historical_offer is not None else "removed"
 
     db.execute(delete(CartItem).where(CartItem.listing_id == listing_id))
+    db.execute(delete(Favourite).where(Favourite.listing_id == listing_id))
     db.commit()
 
-    return {"message": "Listing removed", "listing_id": listing_id}
+    return {"message": "Listing removed", "listing_id": listing_id, "status": listing.status}

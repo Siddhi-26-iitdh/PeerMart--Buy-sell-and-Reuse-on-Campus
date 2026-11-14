@@ -1,70 +1,80 @@
 # PeerMart – Buy, Sell and Reuse on Campus
 
+**Course:** CS602C – Advanced Software Development Laboratory (Indian Institute of Technology Dharwad)
+**GitHub Repository:** `https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus`
+
 ## Project Overview
 
-PeerMart is a campus-focused online marketplace that enables students to buy and sell second-hand items within their college community. Students can list items they no longer need, such as bicycles, textbooks, calculators, electronic gadgets, furniture, hostel essentials, and sports equipment. Other students can browse listings and purchase items at affordable prices.
+PeerMart is an AI-enabled campus marketplace that lets IIT Dharwad students buy, sell, and reuse second-hand items—such as bicycles, textbooks, scientific calculators, electronics, hostel essentials, and sports gear—within a verified `@iitdh.ac.in` community.
 
-PeerMart encourages the reuse of products and facilitates convenient peer-to-peer transactions within the campus community, making student life more affordable, convenient, and sustainable.
+## Architecture & Technology Stack
 
-## Features
+- **Frontend:** React 19, TypeScript, Vite, React Router 7, Nginx (`client_max_body_size 25m`)
+- **Backend:** Python 3.12, FastAPI, SQLAlchemy 2.0, Pydantic v2
+- **Database & Migrations:** MySQL 8.0, Alembic (`alembic upgrade head` through revision `8c9d0e1f2a3b`)
+- **Authentication & Security:** Session-based HTTP-only cookies (`SessionMiddleware`), Argon2 salted password hashing (`argon2-cffi`), role-based access control (`student`, `admin`), and strict ownership enforcement
+- **AI Natural-Language Search:** Groq API (`llama-3.3-70b-versatile`) with structured JSON extraction, word-boundary relevance matching, rate limiting, prompt-injection protection, and deterministic keyword-search fallback
+- **Image Storage:** Supabase Storage (122 hosted product images across 56 listings) + validated local multipart uploads (`/api/uploads`, 2–5 JPEG/PNG images per listing, max 5 MB each)
+- **Testing & CI:** Pytest (`>= 70%` backend coverage), Playwright E2E tests, Ruff linting, GitHub Actions CI
 
-- **Home Page:** Browse products from different categories and explore available listings.
-- **Conventional Search:** Search and filter products by category, maximum price, and condition.
-- **AI-Powered Natural-Language Search:** Search for products using ordinary sentences instead of manually applying filters.
-- **Category Pages:** View listings belonging to a selected category and apply filters.
-- **Product Details:** View product images, title, price, condition, and description.
-- **User Registration and Login:** Create an account and access features available to registered users.
-- **Sell an Item:** Create product listings with a category, title, description, condition, and 2–5 images.
-- **My Sell:** Manage listings under Available, Negotiating, and Sold.
-- **Cart:** View available products added to the cart, remove items, and review the total price.
-- **Favourites:** Save products for later and remove them from favourites.
-- **Make Offer:** Contact sellers and arrange negotiations outside PeerMart.
-- **My Orders:** View ongoing negotiations, completed transactions, and receipts.
-- **Receipt Generation:** Generate a peer-to-peer sale receipt containing product details, final agreed price, and buyer and seller information.
-- **Admin Dashboard:** Monitor registered users and product listings, warn users about reported fraudulent activity, and delete accounts when necessary.
-- **Terms and Conditions:** View and download the rules and policies for buyers and sellers.
+## Key Features & Workflows
 
-## AI-Powered Natural-Language Product Search
+1. **Seller Email Privacy:** Seller email addresses are never exposed in public listing APIs, search results, or AI search responses. A seller's `@iitdh.ac.in` email is revealed only after an authenticated buyer submits a valid offer for that specific listing (and in the post-payment PDF receipt).
+2. **Admin-Approved Student Registration:** New student registrations (`POST /api/auth/register`) start in `pending` status (`account_requests`) without auto-login. Once the administrator (`testadmin63@iitdh.ac.in`) approves the registration in the Admin Dashboard, the student can sign in. All 19 seeded demo student accounts and `testadmin63@iitdh.ac.in` are active by default.
+3. **Admin-Approved Account Deactivation with Obligation Checks:** Students cannot directly delete their accounts (`DELETE /api/auth/me` is disabled). Instead, students submit a Deactivation Request from their Profile page (`POST /api/account/deactivation-request`). The backend blocks approval (`HTTP 409`) if the student has any active buyer offers, active seller negotiations, accepted offers awaiting payment, or reserved listings. Upon approval, personal fields (`phone_no`, `gender`) are anonymized while historical transaction records remain intact.
+4. **Multi-Offer Negotiation & Competing Offer Preservation:** Multiple buyers can submit offers on the same available listing. When the seller accepts one offer, that offer becomes `accepted` and the listing becomes `reserved`, while other buyers' competing offers remain `pending` (not rejected prematurely). Competing offers are automatically rejected only after the accepted buyer completes simulated payment. If the payment fails or is cancelled, the listing reservation is released back to `available`.
+5. **PeerMart Demo Payment Gateway & PDF Receipt Generation:** Accepted buyers complete checkout in a clearly labeled **Demo Payment Gateway (No Real Money)** modal supporting simulated success, simulated failure, and cancellation. Successful payment atomically records the `Sale`, marks the offer `completed` and listing `sold`, and unlocks a downloadable single-page IIT Dharwad PeerMart PDF receipt (`GET /api/sales/{sale_id}/receipt`).
+6. **Complete 5-Section Admin Dashboard (`testadmin63@iitdh.ac.in`):**
+   - **Overview:** Live database metrics for users, pending registrations, deactivation requests, listings by status, offers, completed sales, categories, and contact messages.
+   - **Users & Requests:** Search/filter users, approve/reject pending registrations, review deactivation requests with obligation checks, and activate/deactivate accounts with confirmation modals.
+   - **Listings Moderation:** Filter listings by keyword/status, view seller email and created date, and moderate status (blocking deletion when offers/transactions exist).
+   - **Categories:** Create, rename (`PATCH /api/categories/{id}`), and safely delete categories (blocked when listings exist).
+   - **Contact Messages:** Filter Help Centre submissions by category (`General Inquiry`, `Account Issue`, `Listing Report`, `Deactivation Request`) and status (`new`, `in_progress`, `resolved`), and send admin replies visible in the student's Help Centre history.
 
-PeerMart includes an AI-powered search feature that interprets natural-language queries and extracts relevant product-search criteria, such as category, price, condition, and other attributes.
+## Environment Variables
 
-For example, a user can enter:
+Copy `.env.example` to `.env` in the repository root before starting Docker Compose:
 
-`Find a used bicycle under 3000`
+| Variable | Description | Default / Example |
+|---|---|---|
+| `MYSQL_ROOT_PASSWORD` | MySQL 8 root password | `rootpass` |
+| `MYSQL_DATABASE` | MySQL database name | `peermart` |
+| `MYSQL_USER` | MySQL application user | `peermart` |
+| `MYSQL_PASSWORD` | MySQL application password | `peermart` |
+| `DATABASE_URL` | SQLAlchemy MySQL connection string | `mysql+pymysql://peermart:peermart@db:3306/peermart` |
+| `PEERMART_SESSION_SECRET` | Secret key for signing session cookies | Set a strong random string |
+| `PEERMART_DEMO_PASSWORD` | Initial password used only when seeding an empty DB | Set before first run |
+| `GROQ_API_KEY` | Backend-only Groq API key for AI Search | `gsk_...` (optional; falls back to keyword parser if unset) |
+| `GROQ_MODEL` | Groq model for structured JSON extraction | `llama-3.3-70b-versatile` |
 
-The system interprets the query and uses the extracted criteria to find matching product listings.
+## Quick Start (Docker Compose on WSL Ubuntu / Linux)
 
-If the AI service fails or becomes unavailable, users can continue searching through conventional search and filters.
+```bash
+cp .env.example .env
+# Edit .env to set PEERMART_DEMO_PASSWORD and optional GROQ_API_KEY
+docker compose up --build -d
+```
 
-The feature also includes input validation, rate limiting, prompt-injection handling, API-key protection, and evaluation using predefined test queries.
+- **Frontend Web App:** `http://localhost:8080`
+- **Backend API & OpenAPI Docs:** `http://localhost:8000/docs`
+- **Seeded Demo Accounts:**
+  - **Admin:** `testadmin63@iitdh.ac.in` (password: value of `PEERMART_DEMO_PASSWORD`)
+  - **Students:** `testuser01@iitdh.ac.in` through `testuser19@iitdh.ac.in` (password: value of `PEERMART_DEMO_PASSWORD`)
+  - **Dataset:** 8 categories, 56 listings, and 122 Supabase product images (`backend/dataset/supabase_images_manifest.json`)
 
-## Dataset
+## Running Tests & Linting
 
-PeerMart will use a custom dataset prepared by the project team.
+```bash
+# Backend Ruff lint + Alembic migration + Pytest with >= 70% coverage
+docker compose exec backend ruff check app/ tests/ alembic/ seed.py
+docker compose exec backend pytest tests/ -v --cov=app --cov-report=term-missing --cov-fail-under=70
 
-- **Product categories:** 8 categories, including 7 product categories and 1 Other category.
-- **Product listings:** 48 second-hand products, with at least one product from each category.
-- **Product images:** Each product will have 2–5 images.
-- **Fictional user accounts:** 20 accounts, comprising 19 student accounts and 1 admin account.
-- **AI evaluation dataset:** 50 predefined natural-language queries covering genuine searches, prompt-injection attempts, and invalid or ambiguous inputs.
-- **Privacy:** Fictional user accounts will be used for the sample dataset.
+# Frontend TypeScript & Vite production build
+cd frontend && npm ci && npm run build
 
-## Transaction Process
-
-PeerMart facilitates peer-to-peer transactions between students.
-
-1. The buyer browses products and sends an offer to the seller.
-2. The buyer and seller negotiate outside PeerMart through email or in person.
-3. They arrange the price, meeting, and product handover.
-4. The buyer inspects the item in person and pays the seller directly in cash.
-5. Once the deal is completed, the seller records the sale by selecting the buyer and entering the final agreed price.
-6. The seller generates a receipt, and the sold listing is automatically removed.
-
-## Target Users
-
-- **Senior and graduating students:** Students who want to sell their belongings before leaving campus.
-- **Junior students and new entrants:** Students looking for affordable second-hand items.
-- **Current students:** Students who want to buy or sell items within their campus community.
+# Playwright E2E tests
+cd frontend && PEERMART_DEMO_PASSWORD="<your-demo-password>" npx playwright test
+```
 
 ## Team Members
 
@@ -73,5 +83,4 @@ PeerMart facilitates peer-to-peer transactions between students.
 - **CS26MT013** – Radhemohan Yadav
 
 **Project Guide:** Prof. Gayathri A.
-
 **Course:** CS602C – Advanced Software Development Laboratory

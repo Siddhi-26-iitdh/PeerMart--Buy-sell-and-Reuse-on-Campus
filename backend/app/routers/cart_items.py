@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -18,15 +18,12 @@ router = APIRouter(prefix="/cart-items", tags=["CartItem"])
 
 @router.get("", response_model=CartItemListResponse)
 def list_cart_items(
-    request: Request,
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=100),
+    current_user: User = Depends(require_current_user),
     db: Session = Depends(get_db),
 ):
-    filters = []
-    session_user_id = request.session.get("user_id") if hasattr(request, "session") else None
-    if session_user_id is not None:
-        filters.append(CartItem.user_id == session_user_id)
+    filters = [CartItem.user_id == current_user.user_id]
 
     total = db.scalar(select(func.count()).select_from(CartItem).where(*filters)) or 0
     items = db.scalars(
@@ -52,6 +49,7 @@ def list_cart_items(
 )
 def get_cart_item(
     item_id: int,
+    current_user: User = Depends(require_current_user),
     db: Session = Depends(get_db),
 ):
     item = db.get(CartItem, item_id)
@@ -60,6 +58,12 @@ def get_cart_item(
         raise HTTPException(
             status_code=404,
             detail="CartItem not found",
+        )
+
+    if item.user_id != current_user.user_id and current_user.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to access another user's cart item",
         )
 
     return item
@@ -72,7 +76,7 @@ def create_cart_item(
     db: Session = Depends(get_db),
 ):
     listing = db.get(Listing, payload.listing_id)
-    if listing is None or listing.status == "removed":
+    if listing is None or listing.status in ("removed", "archived"):
         raise HTTPException(status_code=404, detail="Listing not found")
 
     if listing.status != "available":
@@ -118,7 +122,6 @@ def delete_cart_item(
     item = db.get(CartItem, item_id)
     if item is not None:
         if item.user_id != current_user.user_id:
-            # Check if item_id was passed as listing_id for current_user
             by_listing = db.scalar(
                 select(CartItem).where(
                     CartItem.user_id == current_user.user_id,

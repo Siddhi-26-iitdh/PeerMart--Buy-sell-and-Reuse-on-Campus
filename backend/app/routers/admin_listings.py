@@ -19,7 +19,7 @@ router = APIRouter(
 
 
 class AdminListingStatusUpdate(BaseModel):
-    status: Literal["available", "removed"]
+    status: Literal["available", "archived", "removed"]
 
 
 @router.patch("/{listing_id}/status", response_model=ListingResponse)

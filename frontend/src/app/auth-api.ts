@@ -21,11 +21,27 @@ export type RegisterData = {
   terms_accepted: boolean;
 };
 
+export type AccountRequestItem = {
+  request_id: number;
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  user_status: string;
+  request_type: "registration" | "deactivation" | string;
+  status: "pending" | "approved" | "rejected" | string;
+  reason: string | null;
+  admin_comment: string | null;
+  reviewed_by: number | null;
+  created_at: string;
+  reviewed_at: string | null;
+  blocking_reasons: string[];
+};
+
 async function authRequest<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(`/api/auth/${path}`, {
+  const response = await fetch(`/api/${path}`, {
     ...options,
     credentials: "same-origin",
     headers: {
@@ -52,7 +68,7 @@ export function login(
   email: string,
   password: string,
 ): Promise<AuthUser> {
-  return authRequest<AuthUser>("login", {
+  return authRequest<AuthUser>("auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
@@ -61,18 +77,18 @@ export function login(
 export function register(
   data: RegisterData,
 ): Promise<AuthUser> {
-  return authRequest<AuthUser>("register", {
+  return authRequest<AuthUser>("auth/register", {
     method: "POST",
     body: JSON.stringify(data),
   });
 }
 
 export function getCurrentUser(): Promise<AuthUser> {
-  return authRequest<AuthUser>("me");
+  return authRequest<AuthUser>("auth/me");
 }
 
 export function logout(): Promise<{ message: string }> {
-  return authRequest<{ message: string }>("logout", {
+  return authRequest<{ message: string }>("auth/logout", {
     method: "POST",
   });
 }
@@ -82,14 +98,24 @@ export function updateProfile(data: {
   l_name: string;
   phone_no: string;
 }): Promise<AuthUser> {
-  return authRequest<AuthUser>("me", {
+  return authRequest<AuthUser>("auth/me", {
     method: "PATCH",
     body: JSON.stringify(data),
   });
 }
 
-export function deactivateAccount(): Promise<{ message: string }> {
-  return authRequest<{ message: string }>("me", {
-    method: "DELETE",
+export function submitDeactivationRequest(
+  reason?: string | null,
+): Promise<AccountRequestItem> {
+  return authRequest<AccountRequestItem>("account/deactivation-request", {
+    method: "POST",
+    body: JSON.stringify({ reason: reason || null }),
   });
+}
+
+export async function getMyDeactivationRequests(): Promise<AccountRequestItem[]> {
+  const data = await authRequest<{ items: AccountRequestItem[]; total: number }>(
+    "account/deactivation-request/me",
+  );
+  return data.items;
 }

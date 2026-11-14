@@ -24,8 +24,8 @@ from app.schemas.listing_images import (
 router = APIRouter(prefix="/listing-images", tags=["ListingImage"])
 uploads_router = APIRouter(prefix="/uploads", tags=["Uploads"])
 
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
-MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB per image
 
 
 def get_upload_dir() -> Path:
@@ -47,24 +47,42 @@ def _next_display_order(db: Session, listing_id: int) -> int:
     return (current_max or 0) + 1
 
 
-def _save_uploaded_bytes(listing_id: int, raw_bytes: bytes, ext: str) -> str:
+def _validate_image_magic_bytes(raw_bytes: bytes, ext_lower: str) -> None:
+    if ext_lower in {".jpg", ".jpeg"}:
+        if not raw_bytes.startswith(b"\xff\xd8\xff"):
+            raise HTTPException(
+                status_code=422,
+                detail="Invalid JPEG image content",
+            )
+    elif ext_lower == ".png":
+        if not raw_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise HTTPException(
+                status_code=422,
+                detail="Invalid PNG image content",
+            )
+
+
+def _save_uploaded_bytes(listing_id: int, raw_bytes: bytes, ext: str) -> tuple[str, Path]:
     if not raw_bytes:
         raise HTTPException(status_code=422, detail="Uploaded image file is empty")
     if len(raw_bytes) > MAX_IMAGE_BYTES:
         raise HTTPException(
-            status_code=413, detail="Uploaded image exceeds 10 MB limit"
+            status_code=413,
+            detail="Uploaded image exceeds the 5 MB per-file limit",
         )
     ext_lower = ext.lower() if ext else ".jpg"
     if ext_lower not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=422,
-            detail="Unsupported image format. Use JPG, PNG, WEBP, or GIF.",
+            detail="Unsupported image format. Only JPEG and PNG files are allowed.",
         )
+    _validate_image_magic_bytes(raw_bytes, ext_lower)
+
     upload_dir = get_upload_dir()
     filename = f"listing_{listing_id}_{uuid4().hex[:12]}{ext_lower}"
     target = upload_dir / filename
     target.write_bytes(raw_bytes)
-    return f"/api/uploads/{filename}"
+    return f"/api/uploads/{filename}", target
 
 
 @router.get("", response_model=ListingImageListResponse)
@@ -128,6 +146,7 @@ async def create_listing_image(
     listing_id: int | None = None
     display_order: int | None = None
     image_path: str | None = None
+    written_file: Path | None = None
 
     if "multipart/form-data" in content_type:
         form = await request.form()
@@ -153,7 +172,7 @@ async def create_listing_image(
         raw_bytes = await upload.read()
         orig_name = getattr(upload, "filename", None) or "upload.jpg"
         ext = Path(orig_name).suffix or ".jpg"
-        image_path = _save_uploaded_bytes(listing_id, raw_bytes, ext)
+        image_path, written_file = _save_uploaded_bytes(listing_id, raw_bytes, ext)
     else:
         try:
             body = await request.json()
@@ -168,19 +187,12 @@ async def create_listing_image(
             ext = Path(payload.filename or "upload.png").suffix or ".png"
             if "," in b64_data and b64_data.startswith("data:"):
                 header, b64_data = b64_data.split(",", 1)
-                if "png" in header:
-                    ext = ".png"
-                elif "webp" in header:
-                    ext = ".webp"
-                elif "gif" in header:
-                    ext = ".gif"
-                else:
-                    ext = ".jpg"
+                ext = ".png" if "png" in header else ".jpg"
             try:
                 raw_bytes = base64.b64decode(b64_data)
             except Exception as exc:
                 raise HTTPException(status_code=422, detail="Invalid base64 image") from exc
-            image_path = _save_uploaded_bytes(listing_id, raw_bytes, ext)
+            image_path, written_file = _save_uploaded_bytes(listing_id, raw_bytes, ext)
         elif payload.image_path and payload.image_path.strip():
             image_path = payload.image_path.strip()
         else:
@@ -189,14 +201,35 @@ async def create_listing_image(
                 detail="Provide an image file, image_base64, or image_path",
             )
 
+    def _cleanup_file() -> None:
+        if written_file is not None and written_file.is_file():
+            try:
+                written_file.unlink()
+            except OSError:
+                pass
+
     listing = db.get(Listing, listing_id)
-    if listing is None or listing.status == "removed":
+    if listing is None or listing.status in ("removed", "archived"):
+        _cleanup_file()
         raise HTTPException(status_code=404, detail="Listing not found")
 
     if listing.seller_id != current_user.user_id and current_user.role != "admin":
+        _cleanup_file()
         raise HTTPException(
             status_code=403,
             detail="Only the listing seller can upload images for this listing",
+        )
+
+    existing_count = db.scalar(
+        select(func.count())
+        .select_from(ListingImage)
+        .where(ListingImage.listing_id == listing_id)
+    ) or 0
+    if existing_count >= 5:
+        _cleanup_file()
+        raise HTTPException(
+            status_code=422,
+            detail="A listing can have at most 5 images",
         )
 
     if display_order is None or display_order < 1:
@@ -216,9 +249,15 @@ async def create_listing_image(
         image_path=image_path,
         display_order=display_order,
     )
-    db.add(record)
-    db.commit()
-    db.refresh(record)
+    try:
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+    except Exception:
+        db.rollback()
+        _cleanup_file()
+        raise
+
     return record
 
 

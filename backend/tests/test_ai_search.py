@@ -44,6 +44,15 @@ def _seed_listings(db_session):
         ),
         Listing(
             seller_id=seller.user_id,
+            category_id=books.category_id,
+            title="CAT Exam Preparation Guide",
+            description="Quantitative aptitude book for CAT exam aspirants",
+            price=Decimal("400.00"),
+            item_condition="used",
+            status="available",
+        ),
+        Listing(
+            seller_id=seller.user_id,
             category_id=cycles.category_id,
             title="Campus Commuter Bicycle",
             description="Single speed cycle for hostel travel",
@@ -124,6 +133,22 @@ def test_ai_search_groq_success(client, db_session, monkeypatch):
     assert data["interpreted_filters"]["condition"] == "used"
     assert data["total"] == 1
     assert data["items"][0]["title"] == "Engineering Mathematics Textbook"
+    assert "seller_email" not in data["items"][0]
+
+
+def test_ai_search_big_cat_returns_no_unrelated_products(client, db_session, monkeypatch):
+    """Req 9 & 21: Searching 'big cat' must not return CAT Exam books or unrelated products."""
+    _seed_listings(db_session)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+
+    response = client.post(
+        "/api/ai-search",
+        json={"query": "big cat"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 0
+    assert data["items"] == []
 
 
 def test_ai_search_timeout_fallback(client, db_session, monkeypatch):

@@ -848,6 +848,54 @@ paths:
       x-implementation-status: planned
       security:
       - cookieAuth: []
+  /api/categories/{category_id}:
+    patch:
+      tags:
+      - Categories
+      summary: Update Category (Admin Only)
+      operationId: update_category_api_categories__category_id__patch
+  /api/account/deactivation-request:
+    post:
+      tags:
+      - Account & Admin Approvals
+      summary: Submit Account Deactivation Request
+      operationId: create_deactivation_request_api_account_deactivation_request_post
+  /api/account/deactivation-request/me:
+    get:
+      tags:
+      - Account & Admin Approvals
+      summary: List My Account Deactivation Requests
+      operationId: list_my_deactivation_requests_api_account_deactivation_request_me_get
+  /api/admin/overview:
+    get:
+      tags:
+      - Account & Admin Approvals
+      summary: Admin Dashboard Overview Metrics
+      operationId: admin_overview_api_admin_overview_get
+  /api/admin/registrations:
+    get:
+      tags:
+      - Account & Admin Approvals
+      summary: List Registration Requests
+      operationId: list_registration_requests_api_admin_registrations_get
+  /api/admin/registrations/{user_id}:
+    patch:
+      tags:
+      - Account & Admin Approvals
+      summary: Review Registration Request (Approve / Reject)
+      operationId: review_registration_request_api_admin_registrations__user_id__patch
+  /api/admin/deactivation-requests:
+    get:
+      tags:
+      - Account & Admin Approvals
+      summary: List Account Deactivation Requests
+      operationId: list_deactivation_requests_api_admin_deactivation_requests_get
+  /api/admin/deactivation-requests/{request_id}:
+    patch:
+      tags:
+      - Account & Admin Approvals
+      summary: Review Account Deactivation Request (Checks Obligations)
+      operationId: review_deactivation_request_api_admin_deactivation_requests__request_id__patch
 components:
   schemas:
     CartItemListResponse:

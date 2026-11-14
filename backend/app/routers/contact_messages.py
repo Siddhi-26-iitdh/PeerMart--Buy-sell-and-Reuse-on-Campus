@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -15,6 +17,14 @@ from app.schemas.contact_messages import (
 )
 
 router = APIRouter(tags=["Contact Admin"])
+
+STATUS_NORMALIZATION = {
+    "open": "new",
+    "reviewed": "in_progress",
+    "new": "new",
+    "in_progress": "in_progress",
+    "resolved": "resolved",
+}
 
 
 def _serialize_message(
@@ -37,10 +47,14 @@ def _serialize_message(
         sender_email=sender_email,
         listing_id=record.listing_id,
         listing_title=listing_title,
+        category=record.category or "General Inquiry",
         subject=record.subject,
         message=record.message,
-        status=record.status,
+        status=STATUS_NORMALIZATION.get(record.status, record.status),
+        admin_reply=record.admin_reply,
+        reviewed_by=record.reviewed_by,
         created_at=record.created_at,
+        updated_at=record.updated_at,
     )
 
 
@@ -57,7 +71,7 @@ def create_contact_message(
     listing: Listing | None = None
     if payload.listing_id is not None:
         listing = db.get(Listing, payload.listing_id)
-        if listing is None or listing.status == "removed":
+        if listing is None or listing.status in ("removed", "archived"):
             raise HTTPException(
                 status_code=404,
                 detail="Referenced listing not found",
@@ -66,9 +80,10 @@ def create_contact_message(
     record = ContactMessage(
         user_id=current_user.user_id,
         listing_id=payload.listing_id,
+        category=payload.category,
         subject=payload.subject,
         message=payload.message,
-        status="open",
+        status="new",
     )
     db.add(record)
     db.commit()
@@ -139,11 +154,21 @@ def admin_list_contact_messages(
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=100),
     status: str | None = Query(default=None),
+    category: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     filters = []
     if status is not None and status.strip():
-        filters.append(ContactMessage.status == status.strip().lower())
+        norm = STATUS_NORMALIZATION.get(status.strip().lower(), status.strip().lower())
+        if norm == "new":
+            filters.append(ContactMessage.status.in_(["new", "open"]))
+        elif norm == "in_progress":
+            filters.append(ContactMessage.status.in_(["in_progress", "reviewed"]))
+        else:
+            filters.append(ContactMessage.status == norm)
+
+    if category is not None and category.strip():
+        filters.append(ContactMessage.category == category.strip())
 
     total = db.scalar(
         select(func.count()).select_from(ContactMessage).where(*filters)
@@ -201,11 +226,11 @@ def admin_list_contact_messages(
 @router.patch(
     "/admin/contact-messages/{message_id}/status",
     response_model=ContactMessageResponse,
-    dependencies=[Depends(require_admin)],
 )
 def admin_update_contact_message_status(
     message_id: int,
     payload: ContactMessageStatusUpdate,
+    admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     record = db.get(ContactMessage, message_id)
@@ -215,7 +240,12 @@ def admin_update_contact_message_status(
             detail="Contact message not found",
         )
 
-    record.status = payload.status
+    record.status = STATUS_NORMALIZATION.get(payload.status, payload.status)
+    if payload.admin_reply is not None:
+        record.admin_reply = payload.admin_reply.strip() or None
+    record.reviewed_by = admin.user_id
+    record.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
     db.commit()
     db.refresh(record)
 

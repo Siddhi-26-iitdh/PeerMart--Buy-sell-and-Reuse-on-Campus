@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from app.services.ai_search_service import query_cache, rate_limiter
+from app.services.ai_search_service import _fallback_extract_filters, query_cache, rate_limiter
 
 EVAL_PATH = Path(__file__).resolve().parent.parent / "dataset" / "ai_search_eval_queries.json"
 EVAL_DATA = json.loads(EVAL_PATH.read_text(encoding="utf-8"))
@@ -52,3 +52,25 @@ def test_ai_search_50_eval_queries(client, group, case):
     assert response.status_code == case["expected_status"], (
         f"{group} {case['id']} returned {response.status_code}: {response.text}"
     )
+
+
+def test_ai_search_genuine_accuracy_at_least_90_percent():
+    """Req 21: Genuine query category/filter extraction accuracy must be >= 90%."""
+    categories = [
+        "Cycles & Accessories",
+        "Books & Study Materials",
+        "Electronics & Gadgets",
+        "Hostel & Room Essentials",
+        "Sports & Fitness Gear",
+        "Stationery & Lab Equipment",
+        "Clothing & Campus Merch",
+        "Miscellaneous",
+    ]
+    matched = 0
+    for item in EVAL_DATA["genuine"]:
+        filters = _fallback_extract_filters(item["query"], categories)
+        expected_cat = item.get("expected_category")
+        if expected_cat is None or filters.category == expected_cat:
+            matched += 1
+    accuracy = matched / len(EVAL_DATA["genuine"])
+    assert accuracy >= 0.90, f"Expected >= 90% genuine accuracy, got {accuracy:.1%}"

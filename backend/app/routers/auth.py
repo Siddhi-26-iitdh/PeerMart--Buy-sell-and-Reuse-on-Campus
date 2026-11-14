@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.auth_dependencies import require_current_user
 from app.database import get_db
+from app.models.account_request import AccountRequest
 from app.models.user import User
 from app.passwords import hash_password, verify_password
 from app.schemas.user import UserResponse
@@ -61,7 +62,7 @@ def register(data: RegisterRequest, request: Request, db: Session = Depends(get_
     email = normalized_email(data.email)
 
     if not data.terms_accepted:
-        raise HTTPException(422, "Terms must be accepted")
+        raise HTTPException(422, "Terms and privacy notice must be accepted")
 
     existing = db.scalar(select(User).where(func.lower(User.email) == email))
     if existing:
@@ -75,17 +76,25 @@ def register(data: RegisterRequest, request: Request, db: Session = Depends(get_
         gender=data.gender,
         phone_no=data.phone_no,
         role="student",
-        account_status="active",
+        account_status="pending",
         terms_accepted_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
 
     db.add(user)
+    db.flush()
+
+    reg_request = AccountRequest(
+        user_id=user.user_id,
+        request_type="registration",
+        status="pending",
+        reason="New student registration awaiting administrator approval",
+    )
+    db.add(reg_request)
     db.commit()
     db.refresh(user)
 
+    # Req 7: Do not establish an authenticated session until an admin approves the account.
     request.session.clear()
-    request.session["user_id"] = user.user_id
-
     return user
 
 
@@ -98,8 +107,20 @@ def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
     if user is None or not verify_password(data.password, user.password_hash):
         raise HTTPException(401, "Invalid email or password")
 
+    if user.account_status == "pending":
+        raise HTTPException(
+            403,
+            "Your registration is pending administrator approval. Please wait for an admin to approve your account.",
+        )
+
+    if user.account_status == "rejected":
+        raise HTTPException(
+            403,
+            "Your registration request was rejected by the administrator.",
+        )
+
     if user.account_status != "active":
-        raise HTTPException(403, "Account is not active")
+        raise HTTPException(403, "Account is deactivated or inactive")
 
     request.session.clear()
     request.session["user_id"] = user.user_id
@@ -172,17 +193,15 @@ def update_profile(
 
 @router.delete("/me")
 def delete_me(
-    request: Request,
     current_user: User = Depends(require_current_user),
-    db: Session = Depends(get_db),
 ):
-    if current_user.role == "admin":
-        raise HTTPException(403, "Admin accounts cannot be deactivated here")
-
-    current_user.account_status = "inactive"
-    db.commit()
-    request.session.clear()
-    return {"message": "Account deactivated successfully"}
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            "Direct account deactivation is disabled. "
+            "Please submit an account deactivation request for administrator approval."
+        ),
+    )
 
 
 @router.post("/logout")
