@@ -3,7 +3,11 @@ from pathlib import Path
 
 import pytest
 
-from app.services.ai_search_service import _fallback_extract_filters, query_cache, rate_limiter
+from app.services.ai_search_service import (
+    _fallback_extract_filters,
+    query_cache,
+    rate_limiter,
+)
 
 EVAL_PATH = Path(__file__).resolve().parent.parent / "dataset" / "ai_search_eval_queries.json"
 EVAL_DATA = json.loads(EVAL_PATH.read_text(encoding="utf-8"))

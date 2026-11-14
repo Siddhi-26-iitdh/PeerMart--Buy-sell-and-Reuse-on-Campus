@@ -39,6 +39,7 @@ def can_transition_listing(current_status: str, next_status: str) -> bool:
 def get_unresolved_obligation_reasons(db, user_id: int) -> list[str]:
     """Return human-readable reasons blocking account deactivation for user_id."""
     from sqlalchemy import select
+
     from app.models.listing import Listing
     from app.models.offer import Offer
 

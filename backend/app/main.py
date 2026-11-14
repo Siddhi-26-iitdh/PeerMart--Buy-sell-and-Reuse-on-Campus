@@ -17,11 +17,14 @@ from app.routers.contact_messages import router as contact_messages_router
 from app.routers.favourites import router as favourites_router
 from app.routers.listing_images import (
     router as listing_images_router,
+)
+from app.routers.listing_images import (
     uploads_router,
 )
 from app.routers.listings import router as listings_router
 from app.routers.offers import router as offers_router
-from app.routers.sales import payments_router, router as sales_router
+from app.routers.sales import payments_router
+from app.routers.sales import router as sales_router
 from app.routers.users import router as users_router
 
 app = FastAPI(

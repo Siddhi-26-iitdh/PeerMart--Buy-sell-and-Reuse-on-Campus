@@ -346,7 +346,7 @@ def test_registration_approval_and_deactivation_request_workflows(client, db_ses
 
     with (
         TestClient(fastapi_app) as student_client,
-        TestClient(fastapi_app) as seller_client,
+        TestClient(fastapi_app),
         TestClient(fastapi_app) as admin_client,
     ):
         # 1. New student registers -> status is 'pending', not logged in automatically
