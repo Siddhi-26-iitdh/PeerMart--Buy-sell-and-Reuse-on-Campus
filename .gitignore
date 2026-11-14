@@ -47,3 +47,5 @@ backend/.pytest_cache/
 __pycache__/
 *.pyc
 *:Zone.Identifier
+
+MS5_Deliverables/*.mp4
