@@ -23,8 +23,8 @@ services:
       context: ./backend
     environment:
       DATABASE_URL: mysql+pymysql://peermart:${DB_PASSWORD:-peermart}@db:3306/peermart?charset=utf8mb4
-      PEERMART_DEMO_PASSWORD: ${PEERMART_DEMO_PASSWORD:?Demo password missing from .env}
-      PEERMART_SESSION_SECRET: ${PEERMART_SESSION_SECRET:?Session secret missing from .env}
+      PEERMART_DEMO_PASSWORD: ${PEERMART_DEMO_PASSWORD:-PeerMart@2026Demo!}
+      PEERMART_SESSION_SECRET: ${PEERMART_SESSION_SECRET:-peermart-local-development-only-change-before-deployment}
       PEERMART_UPLOAD_DIR: /app/uploads
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
@@ -35,8 +35,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: >
-      sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: ["sh", "/app/start.sh"]
     ports:
       - "8000:8000"
 
