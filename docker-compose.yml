@@ -25,16 +25,18 @@ services:
       DATABASE_URL: mysql+pymysql://peermart:${DB_PASSWORD:-peermart}@db:3306/peermart?charset=utf8mb4
       PEERMART_DEMO_PASSWORD: ${PEERMART_DEMO_PASSWORD:?Demo password missing from .env}
       PEERMART_SESSION_SECRET: ${PEERMART_SESSION_SECRET:?Session secret missing from .env}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      PEERMART_UPLOAD_DIR: /app/uploads
       GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      GROQ_TIMEOUT_SECONDS: ${GROQ_TIMEOUT_SECONDS:-6.0}
+      AI_SEARCH_RATE_LIMIT_PER_MIN: ${AI_SEARCH_RATE_LIMIT_PER_MIN:-10}
+    volumes:
+      - peermart_uploads_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
     command: >
-      sh -c "alembic upgrade head &&
-             python seed.py &&
-             python initialize_demo.py &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
 
@@ -48,3 +50,4 @@ services:
 
 volumes:
   peermart_mysql_data:
+  peermart_uploads_data:

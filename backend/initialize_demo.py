@@ -12,10 +12,10 @@ def get_counts():
     db = SessionLocal()
     try:
         return {
-            "users": db.scalar(select(func.count()).select_from(User)),
-            "categories": db.scalar(select(func.count()).select_from(Category)),
-            "listings": db.scalar(select(func.count()).select_from(Listing)),
-            "images": db.scalar(select(func.count()).select_from(ListingImage)),
+            "users": db.scalar(select(func.count()).select_from(User)) or 0,
+            "categories": db.scalar(select(func.count()).select_from(Category)) or 0,
+            "listings": db.scalar(select(func.count()).select_from(Listing)) or 0,
+            "images": db.scalar(select(func.count()).select_from(ListingImage)) or 0,
         }
     finally:
         db.close()
@@ -24,14 +24,12 @@ def get_counts():
 def verify_final_dataset():
     counts = get_counts()
 
-    expected = {
-        "users": 20,
-        "categories": 8,
-        "listings": 56,
-        "images": 122,
-    }
-
-    if counts != expected:
+    if (
+        counts["users"] < 20
+        or counts["categories"] < 8
+        or counts["listings"] < 56
+        or counts["images"] < 122
+    ):
         raise RuntimeError(
             f"Final dataset verification failed: {counts}"
         )
@@ -39,36 +37,37 @@ def verify_final_dataset():
     db = SessionLocal()
     try:
         images = db.scalars(select(ListingImage)).all()
-
-        if not all(
-            image.image_path.startswith("https://")
-            and "supabase" in image.image_path.lower()
+        supabase_images = [
+            image
             for image in images
-        ):
+            if image.image_path.startswith("https://")
+            and "supabase" in image.image_path.lower()
+        ]
+        if len(supabase_images) < 122:
             raise RuntimeError(
-                "Expected Supabase HTTPS image URLs"
+                f"Expected at least 122 Supabase HTTPS image URLs, found {len(supabase_images)}"
             )
     finally:
         db.close()
 
-    print("PASS: 20 users")
-    print("PASS: 8 categories")
-    print("PASS: 56 listings")
-    print("PASS: 122 Supabase image URLs")
+    print(f"PASS: {counts['users']} users (>= 20)")
+    print(f"PASS: {counts['categories']} categories (>= 8)")
+    print(f"PASS: {counts['listings']} listings (>= 56)")
+    print(f"PASS: {len(supabase_images)} Supabase image URLs (>= 122)")
 
 
 def initialize():
     counts = get_counts()
     print(f"Current database: {counts}")
 
-    if counts == {
-        "users": 20,
-        "categories": 8,
-        "listings": 56,
-        "images": 122,
-    }:
+    if (
+        counts["users"] >= 20
+        and counts["categories"] >= 8
+        and counts["listings"] >= 56
+        and counts["images"] >= 122
+    ):
         verify_final_dataset()
-        print("PASS: Existing demo catalogue preserved")
+        print("PASS: Existing demo catalogue and user records preserved")
         return
 
     if counts == {

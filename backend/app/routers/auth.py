@@ -5,12 +5,20 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.auth_dependencies import require_current_user
 from app.database import get_db
 from app.models.user import User
 from app.passwords import hash_password, verify_password
 from app.schemas.user import UserResponse
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+def normalized_email(email: str) -> str:
+    email = email.strip().lower()
+    if not email.endswith("@iitdh.ac.in") or email.count("@") != 1:
+        raise HTTPException(422, "Valid IIT Dharwad email required")
+    return email
 
 
 class LoginRequest(BaseModel):
@@ -27,14 +35,6 @@ class RegisterRequest(BaseModel):
     phone_no: str | None = None
     terms_accepted: bool
 
-
-def normalized_email(email: str) -> str:
-    email = email.strip().lower()
-    if not email.endswith("@iitdh.ac.in") or email.count("@") != 1:
-        raise HTTPException(422, "Valid IIT Dharwad email required")
-    return email
-
-
     @field_validator("phone_no")
     @classmethod
     def validate_phone(cls, value: str | None) -> str | None:
@@ -43,10 +43,17 @@ def normalized_email(email: str) -> str:
         phone = value.strip()
         if not phone:
             return None
-        if not (len(phone) == 10 and phone.isascii()
-                and phone.isdigit() and phone[0] in "6789"):
+        cleaned = phone.replace(" ", "").replace("-", "")
+        if cleaned.startswith("+91") and len(cleaned) == 13:
+            cleaned = cleaned[3:]
+        if not (
+            len(cleaned) == 10
+            and cleaned.isascii()
+            and cleaned.isdigit()
+            and cleaned[0] in "6789"
+        ):
             raise ValueError("Enter a valid 10-digit Indian mobile number")
-        return phone
+        return cleaned
 
 
 @router.post("/register", response_model=UserResponse, status_code=201)
@@ -116,7 +123,6 @@ def me(request: Request, db: Session = Depends(get_db)):
     return user
 
 
-
 class ProfileUpdateRequest(BaseModel):
     f_name: str = Field(min_length=1, max_length=100)
     l_name: str = Field(min_length=1, max_length=100)
@@ -141,7 +147,9 @@ def update_profile(
 
     first_name = data.f_name.strip()
     last_name = data.l_name.strip()
-    phone = data.phone_no.strip()
+    phone = data.phone_no.strip().replace(" ", "").replace("-", "")
+    if phone.startswith("+91") and len(phone) == 13:
+        phone = phone[3:]
 
     if not first_name or not last_name:
         raise HTTPException(422, "Name cannot be empty")
@@ -160,6 +168,21 @@ def update_profile(
     db.refresh(user)
 
     return user
+
+
+@router.delete("/me")
+def delete_me(
+    request: Request,
+    current_user: User = Depends(require_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role == "admin":
+        raise HTTPException(403, "Admin accounts cannot be deactivated here")
+
+    current_user.account_status = "inactive"
+    db.commit()
+    request.session.clear()
+    return {"message": "Account deactivated successfully"}
 
 
 @router.post("/logout")

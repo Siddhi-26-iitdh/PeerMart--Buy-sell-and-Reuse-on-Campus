@@ -1,5 +1,8 @@
+from pydantic import BaseModel, ConfigDict, Field
 
-from pydantic import BaseModel, ConfigDict
+
+class CartItemCreate(BaseModel):
+    listing_id: int = Field(..., ge=1)
 
 
 class CartItemResponse(BaseModel):

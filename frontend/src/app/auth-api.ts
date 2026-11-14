@@ -34,13 +34,14 @@ async function authRequest<T>(
     },
   });
 
-  const data = await response.json();
+  const data = await response.json().catch(() => null);
 
   if (!response.ok) {
     throw new Error(
       data?.error?.message ??
-      data?.detail ??
-      "Authentication request failed",
+        data?.detail?.message ??
+        data?.detail ??
+        "Authentication request failed",
     );
   }
 
@@ -76,7 +77,6 @@ export function logout(): Promise<{ message: string }> {
   });
 }
 
-
 export function updateProfile(data: {
   f_name: string;
   l_name: string;
@@ -85,5 +85,11 @@ export function updateProfile(data: {
   return authRequest<AuthUser>("me", {
     method: "PATCH",
     body: JSON.stringify(data),
+  });
+}
+
+export function deactivateAccount(): Promise<{ message: string }> {
+  return authRequest<{ message: string }>("me", {
+    method: "DELETE",
   });
 }
