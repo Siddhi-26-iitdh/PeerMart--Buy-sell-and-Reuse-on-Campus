@@ -6,8 +6,6 @@ services:
       MYSQL_DATABASE: peermart
       MYSQL_USER: peermart
       MYSQL_PASSWORD: ${DB_PASSWORD:-peermart}
-    ports:
-      - "3306:3306"
     volumes:
       - peermart_mysql_data:/var/lib/mysql
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
@@ -27,8 +25,8 @@ services:
       PEERMART_SESSION_SECRET: ${PEERMART_SESSION_SECRET:-peermart-local-development-only-change-before-deployment}
       PEERMART_UPLOAD_DIR: /app/uploads
       GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
-      GROQ_TIMEOUT_SECONDS: ${GROQ_TIMEOUT_SECONDS:-6.0}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
+      GROQ_TIMEOUT_SECONDS: ${GROQ_TIMEOUT_SECONDS:-30}
       AI_SEARCH_RATE_LIMIT_PER_MIN: ${AI_SEARCH_RATE_LIMIT_PER_MIN:-10}
     volumes:
       - peermart_uploads_data:/app/uploads
@@ -36,16 +34,21 @@ services:
       db:
         condition: service_healthy
     command: ["sh", "/app/start.sh"]
-    ports:
-      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/openapi.json', timeout=5)"]
+      interval: 5s
+      timeout: 6s
+      retries: 20
+      start_period: 30s
 
   frontend:
     build:
       context: ./frontend
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
-      - "8444:80"
+      - "${FRONTEND_PORT:-8444}:80"
 
 volumes:
   peermart_mysql_data:
