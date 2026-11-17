@@ -279,7 +279,9 @@ STOPWORDS = {
 }
 
 INJECTION_PATTERNS = [
-    re.compile(r"ignore\s+(all\s+|any\s+)?(previous|prior|above|system)\s+instructions", re.I),
+    re.compile(
+        r"ignore\s+(all\s+|any\s+)?(previous|prior|above|system)\s+instructions", re.I
+    ),
     re.compile(r"disregard\s+(all\s+|any\s+)?(previous|prior|above|system)", re.I),
     re.compile(r"forget\s+(everything|all\s+rules|your\s+instructions)", re.I),
     re.compile(r"override\s+(system|safety|rules|instructions)", re.I),
@@ -288,8 +290,14 @@ INJECTION_PATTERNS = [
         r"(system\s+prompt|api\s*key|groq_api_key|secret|password|env|credentials)",
         re.I,
     ),
-    re.compile(r"(you\s+are\s+now|act\s+as|pretend\s+to\s+be|jailbreak|dan\s+mode|developer\s+mode)", re.I),
-    re.compile(r"(drop\s+table|union\s+select|;\s*delete\s+from|;\s*drop\s+|or\s+1\s*=\s*1)", re.I),
+    re.compile(
+        r"(you\s+are\s+now|act\s+as|pretend\s+to\s+be|jailbreak|dan\s+mode|developer\s+mode)",
+        re.I,
+    ),
+    re.compile(
+        r"(drop\s+table|union\s+select|;\s*delete\s+from|;\s*drop\s+|or\s+1\s*=\s*1)",
+        re.I,
+    ),
     re.compile(r"(<script\b|javascript:|onerror\s*=|onload\s*=)", re.I),
     re.compile(r"execute\s+(shell|bash|sql|code|command)", re.I),
 ]
@@ -499,7 +507,9 @@ def interpret_query_with_groq(query: str) -> tuple[AISearchFilters, bool, str | 
     if cached is not None:
         return cached, False, None
 
-    model = os.environ.get("GROQ_MODEL", DEFAULT_GROQ_MODEL).strip() or DEFAULT_GROQ_MODEL
+    model = (
+        os.environ.get("GROQ_MODEL", DEFAULT_GROQ_MODEL).strip() or DEFAULT_GROQ_MODEL
+    )
     try:
         timeout_seconds = float(
             os.environ.get("GROQ_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS))
@@ -522,6 +532,26 @@ def interpret_query_with_groq(query: str) -> tuple[AISearchFilters, bool, str | 
     try:
         with httpx.Client(timeout=timeout_seconds) as client:
             response = client.post(GROQ_API_URL, headers=headers, json=payload)
+
+            # Retry without forced JSON mode if Groq rejects its generated JSON.
+            if response.status_code == 400:
+                try:
+                    error_code = response.json().get("error", {}).get("code")
+                except ValueError:
+                    error_code = None
+
+                if error_code == "json_validate_failed":
+                    retry_payload = {
+                        **payload,
+                        "max_tokens": 500,
+                    }
+                    retry_payload.pop("response_format", None)
+                    response = client.post(
+                        GROQ_API_URL,
+                        headers=headers,
+                        json=retry_payload,
+                    )
+
             response.raise_for_status()
             data = response.json()
             content = data["choices"][0]["message"]["content"]
@@ -572,9 +602,13 @@ def _expand_keywords(keywords: list[str], has_category: bool) -> list[str]:
         if not token or token in STOPWORDS:
             continue
         stem = _singularize(token)
-        if has_category and (token in GENERIC_CATEGORY_TERMS or stem in GENERIC_CATEGORY_TERMS):
+        if has_category and (
+            token in GENERIC_CATEGORY_TERMS or stem in GENERIC_CATEGORY_TERMS
+        ):
             continue
-        synonyms = KEYWORD_SYNONYMS.get(token) or KEYWORD_SYNONYMS.get(stem) or (stem, token)
+        synonyms = (
+            KEYWORD_SYNONYMS.get(token) or KEYWORD_SYNONYMS.get(stem) or (stem, token)
+        )
         for syn in synonyms:
             if syn and syn not in expanded:
                 expanded.append(syn)
@@ -609,10 +643,16 @@ def _matches_word_boundaries(listing: Listing, keywords: list[str]) -> bool:
     # Check each original keyword group
     for kw in keywords:
         stem = _singularize(kw.strip().lower())
-        syns = KEYWORD_SYNONYMS.get(kw.lower()) or KEYWORD_SYNONYMS.get(stem) or (stem, kw.lower())
+        syns = (
+            KEYWORD_SYNONYMS.get(kw.lower())
+            or KEYWORD_SYNONYMS.get(stem)
+            or (stem, kw.lower())
+        )
         for s in syns:
             # Skip matching "CAT" (Common Admission Test) if user searched lowercase "cat" with non-book context like "big cat"
-            if s == "cat" and any(other in keywords for other in ("big", "pet", "animal", "kitten")):
+            if s == "cat" and any(
+                other in keywords for other in ("big", "pet", "animal", "kitten")
+            ):
                 continue
             if re.search(rf"\b{re.escape(s)}", haystack):
                 return True
@@ -711,7 +751,15 @@ def search_listings_by_filters(
         ]
 
     # Stage 5: Only return price/condition-only matches when NO keywords and NO category were given
-    if not filters.keywords and category_id is None:
+    if (
+        not filters.keywords
+        and category_id is None
+        and (
+            filters.min_price is not None
+            or filters.max_price is not None
+            or filters.condition is not None
+        )
+    ):
         return list(
             db.scalars(
                 select(Listing)
