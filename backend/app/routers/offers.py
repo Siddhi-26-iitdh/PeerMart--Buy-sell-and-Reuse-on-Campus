@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -118,7 +119,9 @@ def _enrich_offers(
                 buyer_id=off.buyer_id,
                 offered_price=off.offered_price,
                 status=off.status,
+                last_actor=getattr(off, "last_actor", "buyer") or "buyer",
                 created_at=off.created_at,
+                updated_at=getattr(off, "updated_at", None),
                 listing_title=listing.title if listing else "Listing",
                 listing_price=listing.price if listing else Decimal("0.00"),
                 listing_status=listing.status if listing else "removed",
@@ -287,6 +290,7 @@ def create_offer(
         buyer_id=current_user.user_id,
         offered_price=payload.offered_price,
         status="pending",
+        last_actor="buyer",
     )
     db.add(offer)
     db.commit()
@@ -310,6 +314,14 @@ def update_offer_status(
     if listing is None or listing.status in ("removed", "archived"):
         raise HTTPException(status_code=404, detail="Listing not found")
 
+    is_seller = listing.seller_id == current_user.user_id
+    is_buyer = offer.buyer_id == current_user.user_id
+    if not is_seller and not is_buyer:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the buyer or seller of this offer can update it",
+        )
+
     target_status = payload.status
     if not can_transition_offer(offer.status, target_status):
         raise HTTPException(
@@ -317,17 +329,70 @@ def update_offer_status(
             detail=f"Invalid offer state transition from '{offer.status}' to '{target_status}'",
         )
 
-    if target_status == "accepted":
-        if listing.seller_id != current_user.user_id:
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    last_actor = getattr(offer, "last_actor", "buyer") or "buyer"
+
+    if target_status == "countered":
+        if payload.offered_price is None or payload.offered_price <= 0:
             raise HTTPException(
-                status_code=403,
-                detail="Only the listing seller can accept an offer",
+                status_code=422,
+                detail="A valid positive counteroffer price is required",
             )
-        if offer.status != "pending":
+        if offer.status not in ("pending", "countered"):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot counteroffer when status is '{offer.status}'",
+            )
+        if listing.status != "available":
+            raise HTTPException(
+                status_code=409,
+                detail="Listing is already reserved or sold",
+            )
+        if is_seller:
+            if offer.status == "countered" and last_actor == "seller":
+                # Allow seller to revise their pending counteroffer, or require buyer turn?
+                # Allowing seller to update their counteroffer price is fine, but keep last_actor="seller"
+                pass
+            offer.offered_price = payload.offered_price
+            offer.status = "countered"
+            offer.last_actor = "seller"
+            offer.updated_at = now
+        else:
+            # Buyer can counteroffer only in response to a seller counteroffer
+            if not (offer.status == "countered" and last_actor == "seller"):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Wait for the seller to respond before sending another counteroffer",
+                )
+            offer.offered_price = payload.offered_price
+            offer.status = "countered"
+            offer.last_actor = "buyer"
+            offer.updated_at = now
+
+    elif target_status == "accepted":
+        if offer.status == "pending":
+            if not is_seller:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only the listing seller can accept a pending offer",
+                )
+        elif offer.status == "countered":
+            if last_actor == "seller" and not is_buyer:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only the buyer can accept the seller's counteroffer",
+                )
+            if last_actor == "buyer" and not is_seller:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only the seller can accept the buyer's counteroffer",
+                )
+        else:
             raise HTTPException(
                 status_code=409,
                 detail=f"Cannot accept an offer with status '{offer.status}'",
             )
+
         if listing.status != "available":
             raise HTTPException(
                 status_code=409,
@@ -347,30 +412,43 @@ def update_offer_status(
                 detail="Another offer has already been accepted for this listing",
             )
 
-        # Req 11: Reserve listing for accepted buyer, but DO NOT reject competing pending offers yet.
-        # Competing offers stay pending until payment succeeds.
+        # Req 11: Reserve listing for accepted buyer, keeping competing pending/countered offers intact until payment succeeds.
         offer.status = "accepted"
+        offer.updated_at = now
         listing.status = "reserved"
 
     elif target_status == "rejected":
-        if listing.seller_id != current_user.user_id:
-            raise HTTPException(
-                status_code=403,
-                detail="Only the listing seller can reject an offer",
-            )
+        if offer.status in ("accepted", "payment_pending"):
+            if not is_seller:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only the listing seller can reject an accepted offer",
+                )
+        elif offer.status == "countered" and last_actor == "seller":
+            # Buyer may reject a seller's counteroffer, or seller may reject
+            if not (is_buyer or is_seller):
+                raise HTTPException(status_code=403, detail="Unauthorized")
+        else:
+            if not is_seller:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only the listing seller can reject an offer",
+                )
         was_accepted = offer.status in ("accepted", "payment_pending")
         offer.status = "rejected"
+        offer.updated_at = now
         if was_accepted and listing.status == "reserved":
             listing.status = "available"
 
     elif target_status == "cancelled":
-        if offer.buyer_id != current_user.user_id:
+        if not is_buyer:
             raise HTTPException(
                 status_code=403,
                 detail="Only the buyer who submitted the offer can cancel it",
             )
         was_accepted = offer.status in ("accepted", "payment_pending")
         offer.status = "cancelled"
+        offer.updated_at = now
         if was_accepted and listing.status == "reserved":
             listing.status = "available"
 

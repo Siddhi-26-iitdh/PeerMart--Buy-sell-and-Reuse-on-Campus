@@ -119,3 +119,18 @@ export async function getMyDeactivationRequests(): Promise<AccountRequestItem[]>
   );
   return data.items;
 }
+
+export function requestPasswordReset(
+  email: string,
+  phoneNo?: string | null,
+  reason?: string | null,
+): Promise<{ message: string }> {
+  return authRequest<{ message: string }>("auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({
+      email,
+      phone_no: phoneNo || null,
+      reason: reason || null,
+    }),
+  });
+}

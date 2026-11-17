@@ -1,11 +1,13 @@
 import {
   createAdminCategory,
   decideAdminDeactivationRequest,
+  decideAdminPasswordReset,
   decideAdminRegistration,
   deleteAdminCategory,
   getAdminCategories,
   getAdminDeactivationRequests,
   getAdminOverview,
+  getAdminPasswordResets,
   getAdminRegistrations,
   getAdminUserActivity,
   getAdminUsers,
@@ -23,6 +25,7 @@ import {
   login as apiLogin,
   logout as apiLogout,
   register as apiRegister,
+  requestPasswordReset,
   submitDeactivationRequest,
   updateProfile as apiUpdateProfile,
   type AccountRequestItem,
@@ -760,19 +763,26 @@ function StatusBadge({ children, tone = "green" }: { children: ReactNode; tone?:
 function offerTone(status: string): "green" | "blue" | "amber" | "slate" {
   const s = status.toLowerCase();
   if (s === "accepted" || s === "paid" || s === "completed") return "green";
+  if (s === "countered") return "blue";
   if (s === "pending") return "amber";
   return "slate";
 }
 
-function formatOfferStatus(status: string): string {
+function formatOfferStatus(status: string, lastActor?: string): string {
   const s = status.toLowerCase();
   if (s === "completed" || s === "paid") return "Completed";
   if (s === "payment_pending") return "Payment Pending";
+  if (s === "countered") {
+    if (lastActor === "seller") return "Seller Counteroffer";
+    if (lastActor === "buyer") return "Buyer Counteroffer";
+    return "Counteroffer";
+  }
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function ProductCard({ product }: { product: Product }) {
   const { favouriteIds, toggleFavourite } = useCart();
+  const navigate = useNavigate();
   const runProtectedAction = useProtectedAction();
   const liked = favouriteIds.includes(product.id);
   return (
@@ -1456,7 +1466,7 @@ function ProductPage() {
   const activeOffer = sentOffers.find(
     (o) =>
       o.listing_id === product.id &&
-      ["pending", "accepted", "paid"].includes(o.status.toLowerCase()),
+      ["pending", "countered", "accepted", "paid", "completed"].includes(o.status.toLowerCase()),
   );
   const latestOfferForProduct =
     activeOffer ?? sentOffers.find((o) => o.listing_id === product.id);
@@ -1686,10 +1696,19 @@ function AuthShell({ register = false }: { register?: boolean }) {
   const [forgotPassword, setForgotPassword] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
+  const [resetPhone, setResetPhone] = useState("");
+  const [resetReason, setResetReason] = useState("");
+  const [resetError, setResetError] = useState("");
+  const [resetSubmitting, setResetSubmitting] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { setLoggedIn, setCurrentUser } = useCart();
   const returnTo = (location.state as { from?: string } | null)?.from ?? "/";
+
+  useEffect(() => {
+    setRegistrationPendingUser(null);
+    setAuthError("");
+  }, [register, location.pathname]);
 
   const submitAuth = async (event: FormEvent) => {
     event.preventDefault();
@@ -1780,8 +1799,16 @@ function AuthShell({ register = false }: { register?: boolean }) {
           <p className="muted">
             Once the campus administrator (<strong>testadmin63@iitdh.ac.in</strong>) approves your registration, you can sign in and access all PeerMart features.
           </p>
-          <div>
-            <Link className="btn btn-primary" to="/login">Go to Sign In</Link>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+            <Button
+              onClick={() => {
+                setRegistrationPendingUser(null);
+                setAuthError("");
+                navigate("/login");
+              }}
+            >
+              Go to Sign In
+            </Button>
             <Link className="btn btn-outline" to="/">Browse Marketplace</Link>
           </div>
         </div>
@@ -1825,20 +1852,42 @@ function AuthShell({ register = false }: { register?: boolean }) {
           <div className="modal">
             <button className="modal-close" onClick={() => setForgotPassword(false)}><X /></button>
             {!resetSent ? (
-              <form className="password-reset-form" onSubmit={(event) => { event.preventDefault(); setResetSent(true); }}>
+              <form
+                className="password-reset-form"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  setResetError("");
+                  setResetSubmitting(true);
+                  try {
+                    await requestPasswordReset(
+                      resetEmail.trim().toLowerCase(),
+                      resetPhone.trim() || null,
+                      resetReason.trim() || null,
+                    );
+                    setResetSent(true);
+                  } catch (err) {
+                    setResetError(err instanceof Error ? err.message : "Could not submit reset request");
+                  } finally {
+                    setResetSubmitting(false);
+                  }
+                }}
+              >
                 <span className="modal-icon"><Mail /></span>
                 <h2>Reset your password</h2>
-                <p>Enter your IIT Dharwad email address. We’ll prepare password reset instructions for your account.</p>
-                <label className="field"><span>College email ID</span><div className="input-icon"><Mail size={17} /><input required type="email" pattern=".+@iitdh\.ac\.in" placeholder="name@iitdh.ac.in" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} /></div><small>Use your verified @iitdh.ac.in email.</small></label>
-                <Button type="submit" className="full">Send reset instructions</Button>
+                <p>Submit a password reset request to the campus administrator. Provide your registered mobile number to verify your identity.</p>
+                <label className="field"><span>College email ID *</span><div className="input-icon"><Mail size={17} /><input required type="email" pattern=".+@iitdh\.ac\.in" placeholder="name@iitdh.ac.in" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} /></div><small>Use your verified @iitdh.ac.in email.</small></label>
+                <label className="field"><span>Registered mobile number (for verification)</span><input placeholder="10-digit mobile number" value={resetPhone} onChange={(event) => setResetPhone(event.target.value)} /></label>
+                <label className="field"><span>Additional note (optional)</span><input placeholder="e.g. Forgot password after semester break" value={resetReason} onChange={(event) => setResetReason(event.target.value)} /></label>
+                {resetError && <div className="auth-error" role="alert"><CircleHelp size={17} /><span>{resetError}</span></div>}
+                <Button type="submit" className="full" disabled={resetSubmitting}>{resetSubmitting ? "Submitting..." : "Submit Reset Request"}</Button>
                 <Button variant="ghost" className="full" onClick={() => setForgotPassword(false)}>Back to login</Button>
               </form>
             ) : (
               <div className="password-reset-success">
                 <span className="modal-icon success"><Check /></span>
-                <h2>Check your email</h2>
-                <p>Password reset instructions have been requested for <strong>{resetEmail}</strong>.</p>
-                <div className="notice"><CircleHelp size={18} /><span>Contact <strong>testadmin63@iitdh.ac.in</strong> if you need manual account recovery assistance.</span></div>
+                <h2>Reset Request Submitted</h2>
+                <p>Your password reset request for <strong>{resetEmail}</strong> has been sent to the campus administrator for verification.</p>
+                <div className="notice"><CircleHelp size={18} /><span>Contact <strong>testadmin63@iitdh.ac.in</strong> if you need urgent account recovery assistance.</span></div>
                 <Button className="full" onClick={() => setForgotPassword(false)}>Return to login</Button>
               </div>
             )}
@@ -2383,6 +2432,10 @@ function ProfilePage() {
   }, []);
   const [saved, setSaved] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [counterOfferTarget, setCounterOfferTarget] = useState<{ offer: OfferDetail; role: "buyer" | "seller" } | null>(null);
+  const [counterPriceInput, setCounterPriceInput] = useState("");
+  const [counterError, setCounterError] = useState<string | null>(null);
+  const [counterSubmitting, setCounterSubmitting] = useState(false);
   const [editingListing, setEditingListing] = useState<Product | null>(null);
   const [profile, setProfile] = useState({
     firstName: "",
@@ -2405,12 +2458,40 @@ function ProfilePage() {
     (item) => currentUser && item.sellerId === currentUser.user_id,
   );
   const myNegotiatingOffers = sentOffers.filter((o) =>
-    ["pending", "rejected", "cancelled"].includes(o.status),
+    ["pending", "countered", "rejected", "cancelled"].includes(o.status),
   );
   const myAcceptedOffers = sentOffers.filter((o) => o.status === "accepted");
   const sellerPendingOrPastOffers = receivedOffers.filter((o) =>
-    ["pending", "rejected", "cancelled"].includes(o.status),
+    ["pending", "countered", "rejected", "cancelled"].includes(o.status),
   );
+
+  const openCounterModal = (offer: OfferDetail, role: "buyer" | "seller") => {
+    setCounterOfferTarget({ offer, role });
+    setCounterPriceInput(String(offer.offered_price));
+    setCounterError(null);
+  };
+
+  const submitCounterOffer = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!counterOfferTarget) return;
+    const amount = Number(counterPriceInput);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setCounterError("Enter a valid positive counteroffer price in INR.");
+      return;
+    }
+    setCounterSubmitting(true);
+    setCounterError(null);
+    try {
+      await updateOfferStatusApi(counterOfferTarget.offer.offer_id, "countered", amount);
+      setActionMessage(`Counteroffer of ₹${amount.toLocaleString("en-IN")} sent for ${counterOfferTarget.offer.listing_title}.`);
+      setCounterOfferTarget(null);
+      await refreshMarketplace();
+    } catch (err) {
+      setCounterError(err instanceof Error ? err.message : "Failed to submit counteroffer");
+    } finally {
+      setCounterSubmitting(false);
+    }
+  };
   const sellerAcceptedAwaitingPayment = receivedOffers.filter(
     (o) => o.status === "accepted",
   );
@@ -2656,13 +2737,32 @@ function ProfilePage() {
                   </td>
                   <td>₹{Number(off.listing_price).toLocaleString("en-IN")}</td>
                   <td><strong>₹{Number(off.offered_price).toLocaleString("en-IN")}</strong></td>
-                  <td><StatusBadge tone={offerTone(off.status)}>{formatOfferStatus(off.status)}</StatusBadge></td>
                   <td>
-                    {off.status === "pending" && (
-                      <button className="table-delete" onClick={() => void handleOfferAction(off.offer_id, "cancelled")}>
-                        Cancel Offer
-                      </button>
-                    )}
+                    <StatusBadge tone={offerTone(off.status)}>
+                      {formatOfferStatus(off.status, off.last_actor)}
+                    </StatusBadge>
+                  </td>
+                  <td>
+                    <div className="table-actions">
+                      {off.status === "countered" && off.last_actor === "seller" && (
+                        <>
+                          <button className="table-view" onClick={() => void handleOfferAction(off.offer_id, "accepted")}>
+                            Accept ₹{Number(off.offered_price).toLocaleString("en-IN")}
+                          </button>
+                          <button className="table-view" onClick={() => openCounterModal(off, "buyer")}>
+                            Counteroffer
+                          </button>
+                          <button className="table-delete" onClick={() => void handleOfferAction(off.offer_id, "rejected")}>
+                            Reject
+                          </button>
+                        </>
+                      )}
+                      {(off.status === "pending" || (off.status === "countered" && off.last_actor === "buyer")) && (
+                        <button className="table-delete" onClick={() => void handleOfferAction(off.offer_id, "cancelled")}>
+                          Cancel Offer
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -2710,18 +2810,35 @@ function ProfilePage() {
                   </td>
                   <td><strong>₹{Number(off.offered_price).toLocaleString("en-IN")}</strong></td>
                   <td style={{ fontSize: 12 }}>{new Date(off.created_at).toLocaleString("en-IN")}</td>
-                  <td><StatusBadge tone={offerTone(off.status)}>{formatOfferStatus(off.status)}</StatusBadge></td>
                   <td>
-                    {off.status === "pending" && (
-                      <div className="table-actions">
-                        <button className="table-view" onClick={() => void handleOfferAction(off.offer_id, "accepted")}>
-                          Accept
-                        </button>
-                        <button className="table-delete" onClick={() => void handleOfferAction(off.offer_id, "rejected")}>
-                          Reject
-                        </button>
-                      </div>
-                    )}
+                    <StatusBadge tone={offerTone(off.status)}>
+                      {formatOfferStatus(off.status, off.last_actor)}
+                    </StatusBadge>
+                  </td>
+                  <td>
+                    <div className="table-actions">
+                      {(off.status === "pending" || (off.status === "countered" && off.last_actor === "buyer")) && (
+                        <>
+                          <button className="table-view" onClick={() => void handleOfferAction(off.offer_id, "accepted")}>
+                            Accept
+                          </button>
+                          <button className="table-view" onClick={() => openCounterModal(off, "seller")}>
+                            Counteroffer
+                          </button>
+                          <button className="table-delete" onClick={() => void handleOfferAction(off.offer_id, "rejected")}>
+                            Reject
+                          </button>
+                        </>
+                      )}
+                      {off.status === "countered" && off.last_actor === "seller" && (
+                        <>
+                          <span className="muted" style={{ fontSize: 13 }}>Awaiting buyer</span>
+                          <button className="table-delete" onClick={() => void handleOfferAction(off.offer_id, "rejected")}>
+                            Reject
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -3049,6 +3166,47 @@ function ProfilePage() {
         </div>
       )}
 
+      {counterOfferTarget && (
+        <div className="modal-backdrop">
+          <form className="modal" onSubmit={(e) => void submitCounterOffer(e)}>
+            <button type="button" className="modal-close" onClick={() => setCounterOfferTarget(null)}><X /></button>
+            <span className="modal-icon"><Tag /></span>
+            <h2>Send Counteroffer</h2>
+            <p>
+              Propose a new agreed price for <strong>{counterOfferTarget.offer.listing_title}</strong>.
+              Current proposed price: <strong>₹{Number(counterOfferTarget.offer.offered_price).toLocaleString("en-IN")}</strong>
+            </p>
+            <label className="field" style={{ textAlign: "left" }}>
+              <span>Your Counteroffer Price (INR) *</span>
+              <div className="input-wrap">
+                <span>₹</span>
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  value={counterPriceInput}
+                  onChange={(e) => setCounterPriceInput(e.target.value)}
+                  aria-label="Counteroffer price"
+                />
+              </div>
+            </label>
+            {counterError && (
+              <div className="notice" role="alert" style={{ marginTop: 12 }}>
+                <CircleHelp size={18} />
+                <span>{counterError}</span>
+              </div>
+            )}
+            <div className="modal-actions" style={{ marginTop: 16 }}>
+              <Button variant="outline" onClick={() => setCounterOfferTarget(null)}>Cancel</Button>
+              <Button type="submit" disabled={counterSubmitting}>
+                {counterSubmitting ? "Sending..." : "Send Counteroffer"}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {editingListing && (
         <EditListingModal
           listing={editingListing}
@@ -3217,7 +3375,7 @@ function SellsPage() {
   );
   const availableListings = myListings.filter((item) => item.status !== "Sold");
   const activeReceivedOffers = receivedOffers.filter((off) =>
-    ["pending", "accepted"].includes(off.status),
+    ["pending", "countered", "accepted"].includes(off.status),
   );
 
   const handleOfferDecision = async (
@@ -3661,6 +3819,9 @@ function AdminPage() {
   >([]);
   const [registrationReqs, setRegistrationReqs] = useState<AccountRequestItem[]>([]);
   const [deactivationReqs, setDeactivationReqs] = useState<AccountRequestItem[]>([]);
+  const [passwordResetReqs, setPasswordResetReqs] = useState<AccountRequestItem[]>([]);
+  const [resetPasswordInputs, setResetPasswordInputs] = useState<Record<number, string>>({});
+  const [resetCommentInputs, setResetCommentInputs] = useState<Record<number, string>>({});
   const [adminListings, setAdminListings] = useState(products);
   const [adminCategories, setAdminCategories] = useState<AdminCategory[]>([]);
   const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
@@ -3686,13 +3847,14 @@ function AdminPage() {
 
   const loadAdminData = useCallback(async () => {
     try {
-      const [ov, users, categories, messagesRes, regReqs, deactReqs] = await Promise.all([
+      const [ov, users, categories, messagesRes, regReqs, deactReqs, pwReqs] = await Promise.all([
         getAdminOverview(),
         getAdminUsers(),
         getAdminCategories(),
         getAdminContactMessages(),
         getAdminRegistrations(),
         getAdminDeactivationRequests(),
+        getAdminPasswordResets(),
       ]);
 
       setOverview(ov);
@@ -3714,6 +3876,7 @@ function AdminPage() {
       setContactMessages(messagesRes.items);
       setRegistrationReqs(regReqs);
       setDeactivationReqs(deactReqs);
+      setPasswordResetReqs(pwReqs);
       setAdminDataError(null);
     } catch (error) {
       setAdminDataError(
@@ -4131,6 +4294,122 @@ function AdminPage() {
               )}
             </section>
 
+            {/* Password Reset Requests Section (Issue 9) */}
+            <section className="admin-panel">
+              <div className="panel-head">
+                <div>
+                  <h2>Password Reset Requests</h2>
+                  <p>Verify requester identity before issuing a temporary password</p>
+                </div>
+                <strong className="panel-count">{passwordResetReqs.length}</strong>
+              </div>
+              {passwordResetReqs.length > 0 ? (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Student</th>
+                      <th>Verification &amp; Note</th>
+                      <th>Status</th>
+                      <th>Temporary Password &amp; Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {passwordResetReqs.map((req) => (
+                      <tr key={req.request_id}>
+                        <td>
+                          <strong>{req.user_name}</strong>
+                          <div className="muted" style={{ fontSize: 13 }}>{req.user_email}</div>
+                        </td>
+                        <td>{req.reason || "No verification details provided"}</td>
+                        <td>
+                          <StatusBadge tone={req.status === "approved" ? "green" : req.status === "pending" ? "amber" : "slate"}>
+                            {req.status === "approved" ? "Completed" : req.status}
+                          </StatusBadge>
+                          {req.admin_comment && (
+                            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{req.admin_comment}</div>
+                          )}
+                        </td>
+                        <td>
+                          {req.status === "pending" ? (
+                            <div style={{ display: "grid", gap: 6, minWidth: 230 }}>
+                              <input
+                                type="password"
+                                minLength={8}
+                                placeholder="New temporary password (8+ chars)"
+                                value={resetPasswordInputs[req.request_id] ?? ""}
+                                onChange={(e) =>
+                                  setResetPasswordInputs((prev) => ({ ...prev, [req.request_id]: e.target.value }))
+                                }
+                                style={{ padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 13 }}
+                              />
+                              <input
+                                placeholder="Admin verification note (optional)"
+                                value={resetCommentInputs[req.request_id] ?? ""}
+                                onChange={(e) =>
+                                  setResetCommentInputs((prev) => ({ ...prev, [req.request_id]: e.target.value }))
+                                }
+                                style={{ padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 13 }}
+                              />
+                              <div className="table-actions">
+                                <button
+                                  className="table-view"
+                                  onClick={async () => {
+                                    const newPw = (resetPasswordInputs[req.request_id] ?? "").trim();
+                                    if (newPw.length < 8) {
+                                      window.alert("Enter a temporary password of at least 8 characters.");
+                                      return;
+                                    }
+                                    try {
+                                      await decideAdminPasswordReset(
+                                        req.request_id,
+                                        "reset",
+                                        newPw,
+                                        resetCommentInputs[req.request_id],
+                                      );
+                                      setAdminBanner(`Password reset completed for ${req.user_email}.`);
+                                      setResetPasswordInputs((prev) => ({ ...prev, [req.request_id]: "" }));
+                                      await loadAdminData();
+                                    } catch (err) {
+                                      window.alert(err instanceof Error ? err.message : "Password reset failed");
+                                    }
+                                  }}
+                                >
+                                  Reset Password
+                                </button>
+                                <button
+                                  className="table-delete"
+                                  onClick={async () => {
+                                    try {
+                                      await decideAdminPasswordReset(
+                                        req.request_id,
+                                        "reject",
+                                        undefined,
+                                        resetCommentInputs[req.request_id] || "Identity could not be verified",
+                                      );
+                                      setAdminBanner(`Rejected password reset request for ${req.user_email}.`);
+                                      await loadAdminData();
+                                    } catch (err) {
+                                      window.alert(err instanceof Error ? err.message : "Rejection failed");
+                                    }
+                                  }}
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="muted" style={{ fontSize: 13 }}>Processed</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="admin-empty">No password reset requests submitted.</div>
+              )}
+            </section>
+
             {/* Registered Users Section */}
             <section className="admin-panel">
               <div className="panel-head">
@@ -4249,10 +4528,44 @@ function AdminPage() {
             {userActivity && (
               <>
                 <section className="admin-panel">
-                  <div className="panel-head"><div><h2>Account details</h2><p>Verified database information</p></div></div>
-                  <p>Phone: {userActivity.user.phone_no || "Not provided"}</p>
-                  <p>Role: {userActivity.user.role}</p>
-                  <p>Status: {userActivity.user.account_status}</p>
+                  <div className="panel-head">
+                    <div><h2>Account details</h2><p>Verified database information and account requests</p></div>
+                    <StatusBadge tone={userActivity.user.account_status === "active" ? "green" : userActivity.user.account_status === "pending" ? "amber" : "slate"}>
+                      {userActivity.user.account_status}
+                    </StatusBadge>
+                  </div>
+                  <div className="account-details-grid">
+                    <div className="account-detail-item">
+                      <span className="account-detail-label">Full Name</span>
+                      <span className="account-detail-value">{userActivity.user.name}</span>
+                    </div>
+                    <div className="account-detail-item">
+                      <span className="account-detail-label">College Email</span>
+                      <span className="account-detail-value">{userActivity.user.email}</span>
+                    </div>
+                    <div className="account-detail-item">
+                      <span className="account-detail-label">Phone Number</span>
+                      <span className="account-detail-value">{userActivity.user.phone_no || "Not provided"}</span>
+                    </div>
+                    <div className="account-detail-item">
+                      <span className="account-detail-label">Role</span>
+                      <span className="account-detail-value" style={{ textTransform: "capitalize" }}>{userActivity.user.role}</span>
+                    </div>
+                    <div className="account-detail-item">
+                      <span className="account-detail-label">Account Status</span>
+                      <span className="account-detail-value" style={{ textTransform: "capitalize" }}>{userActivity.user.account_status}</span>
+                    </div>
+                    <div className="account-detail-item">
+                      <span className="account-detail-label">Open Requests</span>
+                      <span className="account-detail-value">
+                        {[
+                          ...registrationReqs.filter((r) => r.user_id === userActivity.user.user_id && r.status === "pending").map(() => "Pending Registration"),
+                          ...deactivationReqs.filter((r) => r.user_id === userActivity.user.user_id && r.status === "pending").map(() => "Pending Deactivation"),
+                          ...passwordResetReqs.filter((r) => r.user_id === userActivity.user.user_id && r.status === "pending").map(() => "Pending Password Reset"),
+                        ].join(", ") || "None"}
+                      </span>
+                    </div>
+                  </div>
                 </section>
                 {([
                   ["All listings", userActivity.listings.map((item) => ({ id: item.listing_id, title: item.title, amount: item.price, status: item.status }))],
@@ -4504,7 +4817,7 @@ function AdminPage() {
                   style={{ padding: "8px 12px", border: "1px solid var(--line)", borderRadius: 8 }}
                 >
                   <option value="all">All statuses</option>
-                  <option value="new">New</option>
+                  <option value="new">Pending</option>
                   <option value="in_progress">In Progress</option>
                   <option value="resolved">Resolved</option>
                 </select>
@@ -4542,18 +4855,17 @@ function AdminPage() {
                       <td>{msg.listing_title ?? "—"}</td>
                       <td>
                         <StatusBadge tone={msg.status === "resolved" ? "green" : msg.status === "in_progress" ? "blue" : "amber"}>
-                          {msg.status === "in_progress" ? "In Progress" : msg.status === "resolved" ? "Resolved" : "New"}
+                          {msg.status === "in_progress" ? "In Progress" : msg.status === "resolved" ? "Resolved" : "Pending"}
                         </StatusBadge>
                       </td>
                       <td>
-                        <div style={{ display: "grid", gap: 6 }}>
-                          <input
+                        <div className="admin-reply-box">
+                          <textarea
                             placeholder="Write admin reply…"
                             value={replyDrafts[msg.message_id] ?? msg.admin_reply ?? ""}
                             onChange={(e) =>
                               setReplyDrafts((prev) => ({ ...prev, [msg.message_id]: e.target.value }))
                             }
-                            style={{ padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 13 }}
                           />
                           <div className="table-actions">
                             {msg.status !== "in_progress" && (
@@ -4651,11 +4963,24 @@ function ContactAdminPage() {
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [myMessages, setMyMessages] = useState<ContactMessage[]>([]);
 
-  useEffect(() => {
-    getMyContactMessages()
-      .then((res) => setMyMessages(res.items))
-      .catch(() => {});
+  const refreshMyMessages = useCallback(async () => {
+    try {
+      const res = await getMyContactMessages();
+      setMyMessages(res.items);
+    } catch {
+      // Ignore transient refresh errors
+    }
   }, []);
+
+  useEffect(() => {
+    void refreshMyMessages();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void refreshMyMessages();
+      }
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [refreshMyMessages]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -4811,7 +5136,7 @@ function ContactAdminPage() {
                     <td>{msg.listing_title ?? "—"}</td>
                     <td>
                       <StatusBadge tone={msg.status === "resolved" ? "green" : msg.status === "in_progress" ? "blue" : "amber"}>
-                        {msg.status === "in_progress" ? "In Progress" : msg.status === "resolved" ? "Resolved" : "New"}
+                        {msg.status === "in_progress" ? "In Progress" : msg.status === "resolved" ? "Resolved" : "Pending"}
                       </StatusBadge>
                     </td>
                   </tr>

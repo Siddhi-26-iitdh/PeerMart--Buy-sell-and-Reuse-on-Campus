@@ -11,7 +11,10 @@ class OfferCreate(BaseModel):
 
 
 class OfferStatusUpdate(BaseModel):
-    status: Literal["accepted", "rejected", "cancelled"]
+    status: Literal["accepted", "countered", "rejected", "cancelled"]
+    offered_price: Decimal | None = Field(
+        default=None, gt=0, max_digits=10, decimal_places=2
+    )
 
 
 class OfferResponse(BaseModel):
@@ -22,7 +25,9 @@ class OfferResponse(BaseModel):
     buyer_id: int
     offered_price: Decimal
     status: str
+    last_actor: str = "buyer"
     created_at: datetime
+    updated_at: datetime | None = None
 
 
 class OfferDetailResponse(OfferResponse):

@@ -20,6 +20,7 @@ export interface AdminOverview {
   active_users: number;
   pending_registrations: number;
   pending_deactivations: number;
+  pending_password_resets: number;
   total_listings: number;
   available_listings: number;
   reserved_listings: number;
@@ -205,6 +206,32 @@ export function decideAdminDeactivationRequest(
     {
       method: "PATCH",
       body: JSON.stringify({ action, admin_comment: adminComment || null }),
+    },
+  );
+}
+
+export async function getAdminPasswordResets(): Promise<AccountRequestItem[]> {
+  const res = await fetchAdminData<{ items: AccountRequestItem[]; total: number }>(
+    "/api/admin/password-resets",
+  );
+  return res.items;
+}
+
+export function decideAdminPasswordReset(
+  requestId: number,
+  action: "reset" | "reject",
+  newPassword?: string,
+  adminComment?: string,
+): Promise<AccountRequestItem> {
+  return fetchAdminData<AccountRequestItem>(
+    `/api/admin/password-resets/${requestId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        action,
+        new_password: newPassword || null,
+        admin_comment: adminComment || null,
+      }),
     },
   );
 }
