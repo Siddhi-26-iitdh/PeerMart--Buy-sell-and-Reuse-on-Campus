@@ -534,7 +534,7 @@ def interpret_query_with_groq(query: str) -> tuple[AISearchFilters, bool, str | 
             response = client.post(GROQ_API_URL, headers=headers, json=payload)
 
             # Retry without forced JSON mode if Groq rejects its generated JSON.
-            if response.status_code == 400:
+            if getattr(response, 'status_code', 200) == 400:
                 try:
                     error_code = response.json().get("error", {}).get("code")
                 except ValueError:
