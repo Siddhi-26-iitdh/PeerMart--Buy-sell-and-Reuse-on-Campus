@@ -13,6 +13,12 @@ class AccountRequestDecision(BaseModel):
     admin_comment: str | None = Field(default=None, max_length=1000)
 
 
+class PasswordResetDecision(BaseModel):
+    action: Literal["reset", "reject"]
+    new_password: str | None = Field(default=None, min_length=8, max_length=128)
+    admin_comment: str | None = Field(default=None, max_length=1000)
+
+
 class AccountRequestResponse(BaseModel):
     request_id: int
     user_id: int
@@ -39,6 +45,7 @@ class AdminOverviewResponse(BaseModel):
     active_users: int
     pending_registrations: int
     pending_deactivations: int
+    pending_password_resets: int = 0
     total_listings: int
     available_listings: int
     reserved_listings: int

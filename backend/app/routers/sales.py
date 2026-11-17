@@ -496,7 +496,7 @@ def process_mock_payment(
             select(Offer).where(
                 Offer.listing_id == listing.listing_id,
                 Offer.offer_id != offer.offer_id,
-                Offer.status.in_(["pending", "accepted", "payment_pending"]),
+                Offer.status.in_(["pending", "countered", "accepted", "payment_pending"]),
             )
         ).all()
         for other in other_offers:

@@ -30,6 +30,12 @@ class Offer(Base):
     status: Mapped[str] = mapped_column(
         String(30), nullable=False, default="pending"
     )
+    last_actor: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="buyer", server_default="buyer"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, onupdate=func.now()
     )

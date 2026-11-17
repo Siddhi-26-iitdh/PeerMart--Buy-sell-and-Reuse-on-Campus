@@ -12,12 +12,14 @@ from app.models.listing import Listing
 from app.models.offer import Offer
 from app.models.sale import Sale
 from app.models.user import User
+from app.passwords import hash_password
 from app.schemas.account_requests import (
     AccountRequestDecision,
     AccountRequestListResponse,
     AccountRequestResponse,
     AdminOverviewResponse,
     DeactivationRequestCreate,
+    PasswordResetDecision,
 )
 from app.services.state_machine import get_unresolved_obligation_reasons
 
@@ -134,6 +136,14 @@ def get_admin_overview(db: Session = Depends(get_db)):
             .select_from(AccountRequest)
             .where(
                 AccountRequest.request_type == "deactivation",
+                AccountRequest.status == "pending",
+            )
+        ) or 0,
+        pending_password_resets=db.scalar(
+            select(func.count())
+            .select_from(AccountRequest)
+            .where(
+                AccountRequest.request_type == "password_reset",
                 AccountRequest.status == "pending",
             )
         ) or 0,
@@ -336,6 +346,98 @@ def decide_deactivation_request(
         req.status = "rejected"
 
     req.admin_comment = payload.admin_comment.strip() if payload.admin_comment else None
+    req.reviewed_by = admin.user_id
+    req.reviewed_at = now
+    db.commit()
+    db.refresh(req)
+    db.refresh(user)
+
+    return _serialize_request(db, req, user)
+
+
+@router.get(
+    "/admin/password-resets",
+    response_model=AccountRequestListResponse,
+    dependencies=[Depends(require_admin)],
+)
+def list_password_reset_requests(
+    status: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    filters = [AccountRequest.request_type == "password_reset"]
+    if status and status.strip():
+        filters.append(AccountRequest.status == status.strip().lower())
+
+    rows = list(
+        db.scalars(
+            select(AccountRequest)
+            .where(*filters)
+            .order_by(AccountRequest.created_at.desc(), AccountRequest.request_id.desc())
+        ).all()
+    )
+    user_ids = {r.user_id for r in rows}
+    users_by_id = (
+        {
+            u.user_id: u
+            for u in db.scalars(select(User).where(User.user_id.in_(user_ids))).all()
+        }
+        if user_ids
+        else {}
+    )
+
+    items = [_serialize_request(db, r, users_by_id.get(r.user_id)) for r in rows]
+    return AccountRequestListResponse(items=items, total=len(items))
+
+
+@router.patch(
+    "/admin/password-resets/{request_id}",
+    response_model=AccountRequestResponse,
+)
+def decide_password_reset_request(
+    request_id: int,
+    payload: PasswordResetDecision,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    req = db.get(AccountRequest, request_id)
+    if req is None or req.request_type != "password_reset":
+        raise HTTPException(status_code=404, detail="Password reset request not found")
+
+    if req.status != "pending":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Password reset request has already been {req.status}",
+        )
+
+    user = db.get(User, req.user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.role == "admin":
+        raise HTTPException(status_code=403, detail="Cannot reset admin password via this endpoint")
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if payload.action == "reset":
+        if not payload.new_password or len(payload.new_password.strip()) < 8:
+            raise HTTPException(
+                status_code=422,
+                detail="A new temporary password of at least 8 characters is required",
+            )
+        user.password_hash = hash_password(payload.new_password)
+        req.status = "approved"
+        req.admin_comment = (
+            payload.admin_comment.strip()
+            if payload.admin_comment and payload.admin_comment.strip()
+            else "Password reset completed by administrator after identity verification."
+        )
+    else:
+        req.status = "rejected"
+        req.admin_comment = (
+            payload.admin_comment.strip()
+            if payload.admin_comment and payload.admin_comment.strip()
+            else "Password reset request rejected."
+        )
+
     req.reviewed_by = admin.user_id
     req.reviewed_at = now
     db.commit()

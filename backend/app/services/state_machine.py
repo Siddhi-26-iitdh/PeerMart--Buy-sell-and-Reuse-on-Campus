@@ -2,7 +2,8 @@
 
 
 OFFER_TRANSITIONS: dict[str, set[str]] = {
-    "pending": {"accepted", "rejected", "cancelled", "expired"},
+    "pending": {"accepted", "countered", "rejected", "cancelled", "expired"},
+    "countered": {"accepted", "countered", "rejected", "cancelled", "expired"},
     "accepted": {"payment_pending", "completed", "paid", "cancelled", "rejected", "expired"},
     "payment_pending": {"completed", "paid", "accepted", "cancelled", "expired"},
     "completed": set(),
@@ -21,11 +22,11 @@ LISTING_TRANSITIONS: dict[str, set[str]] = {
     "removed": {"available", "archived"},
 }
 
-ACTIVE_OFFER_STATUSES = ("pending", "accepted", "payment_pending")
+ACTIVE_OFFER_STATUSES = ("pending", "countered", "accepted", "payment_pending")
 
 
 def can_transition_offer(current_status: str, next_status: str) -> bool:
-    if current_status == next_status:
+    if current_status == next_status and current_status != "countered":
         return True
     return next_status in OFFER_TRANSITIONS.get(current_status, set())
 
@@ -39,7 +40,6 @@ def can_transition_listing(current_status: str, next_status: str) -> bool:
 def get_unresolved_obligation_reasons(db, user_id: int) -> list[str]:
     """Return human-readable reasons blocking account deactivation for user_id."""
     from sqlalchemy import select
-
     from app.models.listing import Listing
     from app.models.offer import Offer
 
@@ -53,11 +53,11 @@ def get_unresolved_obligation_reasons(db, user_id: int) -> list[str]:
     ).all()
     if buyer_active_offers:
         accepted_cnt = sum(1 for o in buyer_active_offers if o.status in ("accepted", "payment_pending"))
-        pending_cnt = sum(1 for o in buyer_active_offers if o.status == "pending")
+        pending_cnt = sum(1 for o in buyer_active_offers if o.status in ("pending", "countered"))
         if accepted_cnt:
             reasons.append(f"{accepted_cnt} accepted offer(s) awaiting buyer payment")
         if pending_cnt:
-            reasons.append(f"{pending_cnt} active pending buyer offer(s)")
+            reasons.append(f"{pending_cnt} active pending/countered buyer offer(s)")
 
     seller_active_offers = db.scalars(
         select(Offer)

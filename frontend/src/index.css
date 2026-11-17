@@ -609,3 +609,54 @@ td > button { border: 0; background: transparent; }
   .profile-head { align-items: flex-start; flex-wrap: wrap; }
   .metric-grid { grid-template-columns: 1fr; }
 }
+
+/* Issue 3: Formatted Admin Account Details Grid */
+.account-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px;
+  padding: 18px 20px 22px;
+}
+.account-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.account-detail-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.account-detail-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--slate);
+  word-break: break-word;
+}
+
+/* Issue 4 & 9: Ensure admin tables scroll cleanly without truncating actions */
+.admin-panel {
+  overflow-x: auto;
+}
+.admin-reply-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 240px;
+}
+.admin-reply-box textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+}

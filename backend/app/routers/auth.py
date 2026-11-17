@@ -22,6 +22,25 @@ def normalized_email(email: str) -> str:
     return email
 
 
+def _clean_indian_phone(value: str | None) -> str | None:
+    if value is None:
+        return None
+    phone = value.strip()
+    if not phone:
+        return None
+    cleaned = phone.replace(" ", "").replace("-", "")
+    if cleaned.startswith("+91") and len(cleaned) == 13:
+        cleaned = cleaned[3:]
+    if not (
+        len(cleaned) == 10
+        and cleaned.isascii()
+        and cleaned.isdigit()
+        and cleaned[0] in "6789"
+    ):
+        raise ValueError("Enter a valid 10-digit Indian mobile number")
+    return cleaned
+
+
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -39,22 +58,13 @@ class RegisterRequest(BaseModel):
     @field_validator("phone_no")
     @classmethod
     def validate_phone(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        phone = value.strip()
-        if not phone:
-            return None
-        cleaned = phone.replace(" ", "").replace("-", "")
-        if cleaned.startswith("+91") and len(cleaned) == 13:
-            cleaned = cleaned[3:]
-        if not (
-            len(cleaned) == 10
-            and cleaned.isascii()
-            and cleaned.isdigit()
-            and cleaned[0] in "6789"
-        ):
-            raise ValueError("Enter a valid 10-digit Indian mobile number")
-        return cleaned
+        return _clean_indian_phone(value)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+    phone_no: str | None = Field(default=None, max_length=20)
+    reason: str | None = Field(default=None, max_length=500)
 
 
 @router.post("/register", response_model=UserResponse, status_code=201)
@@ -126,6 +136,61 @@ def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
     request.session["user_id"] = user.user_id
 
     return user
+
+
+@router.post("/forgot-password", status_code=201)
+def request_password_reset(
+    data: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    email = normalized_email(data.email)
+    user = db.scalar(select(User).where(func.lower(User.email) == email))
+
+    if user is not None and user.account_status == "active" and user.role != "admin":
+        phone_verified = False
+        cleaned_input_phone = None
+        if data.phone_no and data.phone_no.strip():
+            try:
+                cleaned_input_phone = _clean_indian_phone(data.phone_no)
+            except ValueError:
+                cleaned_input_phone = None
+        if cleaned_input_phone and user.phone_no and cleaned_input_phone == user.phone_no:
+            phone_verified = True
+
+        verification_note = (
+            "Identity verified: registered phone number matched."
+            if phone_verified
+            else "Manual identity verification required by administrator."
+        )
+        user_reason = data.reason.strip() if data.reason and data.reason.strip() else "Student requested password reset."
+        combined_reason = f"{verification_note} Note: {user_reason}"
+
+        existing_pending = db.scalar(
+            select(AccountRequest).where(
+                AccountRequest.user_id == user.user_id,
+                AccountRequest.request_type == "password_reset",
+                AccountRequest.status == "pending",
+            )
+        )
+        if existing_pending is not None:
+            existing_pending.reason = combined_reason
+        else:
+            db.add(
+                AccountRequest(
+                    user_id=user.user_id,
+                    request_type="password_reset",
+                    status="pending",
+                    reason=combined_reason,
+                )
+            )
+        db.commit()
+
+    return {
+        "message": (
+            "If an active @iitdh.ac.in student account exists for this email, "
+            "your password reset request has been submitted for administrator verification."
+        )
+    }
 
 
 @router.get("/me", response_model=UserResponse)

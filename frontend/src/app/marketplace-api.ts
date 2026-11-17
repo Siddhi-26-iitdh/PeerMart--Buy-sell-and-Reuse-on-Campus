@@ -3,7 +3,9 @@ export interface OfferDetail {
   listing_id: number;
   buyer_id: number;
   offered_price: string | number;
-  status: "pending" | "accepted" | "rejected" | "cancelled" | "paid" | string;
+  status: "pending" | "countered" | "accepted" | "rejected" | "cancelled" | "paid" | "completed" | string;
+  last_actor?: "buyer" | "seller" | string;
+  updated_at?: string | null;
   created_at: string;
   listing_title: string;
   listing_price: string | number;
@@ -250,11 +252,14 @@ export async function getReceivedOffersApi(): Promise<OfferDetail[]> {
 
 export async function updateOfferStatusApi(
   offerId: number,
-  status: "accepted" | "rejected" | "cancelled",
+  status: "accepted" | "countered" | "rejected" | "cancelled",
+  offeredPrice?: number,
 ): Promise<OfferDetail> {
   return apiFetch<OfferDetail>(`/api/offers/${offerId}`, {
     method: "PATCH",
-    body: JSON.stringify({ status }),
+    body: JSON.stringify(
+      offeredPrice !== undefined ? { status, offered_price: offeredPrice } : { status },
+    ),
   });
 }
 

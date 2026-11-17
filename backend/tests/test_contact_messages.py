@@ -118,3 +118,29 @@ def test_contact_admin_submit_and_admin_workflow(client, db_session):
     assert updated.status_code == 200
     assert updated.json()["status"] == "resolved"
     assert updated.json()["admin_reply"] == "Verified listing details on campus."
+
+
+def test_contact_messages_user_isolation(client, db_session):
+    """Issue 4: Other students cannot view another student's grievances."""
+    student1, _, listing = _create_users_and_listing(db_session)
+    student2 = User(
+        f_name="Student",
+        l_name="Two",
+        email="student2@iitdh.ac.in",
+        password_hash=hash_password("TestPass123!"),
+        role="student",
+        account_status="active",
+    )
+    db_session.add(student2)
+    db_session.commit()
+
+    client.post("/api/auth/login", json={"email": student1.email, "password": "TestPass123!"})
+    client.post(
+        "/api/contact-messages",
+        json={"category": "Account Issue", "subject": "Private grievance", "message": "Only student1 should see this"},
+    )
+
+    client.post("/api/auth/login", json={"email": student2.email, "password": "TestPass123!"})
+    s2_msgs = client.get("/api/contact-messages/me")
+    assert s2_msgs.status_code == 200
+    assert s2_msgs.json()["total"] == 0

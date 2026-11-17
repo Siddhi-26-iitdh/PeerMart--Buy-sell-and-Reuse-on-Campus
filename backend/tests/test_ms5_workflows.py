@@ -608,3 +608,127 @@ def test_56_listings_and_122_supabase_images_dataset_preserved():
         else sum(len(item.get("images", [])) for item in manifest.get("products", []))
     )
     assert total_images == 122
+
+
+def test_counteroffer_negotiation_to_payment_and_receipt(client, db_session):
+    """Issue 5: Buyer offer -> Seller counteroffer -> Buyer counteroffer -> Seller counteroffer -> Buyer accept -> Mock payment -> PDF receipt."""
+    data = _seed_marketplace_users(db_session)
+    pw = data["password"]
+    listing_id = data["listing1"].listing_id
+
+    with (
+        TestClient(fastapi_app) as seller_client,
+        TestClient(fastapi_app) as buyer_client,
+        TestClient(fastapi_app) as outsider_client,
+    ):
+        assert seller_client.post("/api/auth/login", json={"email": data["seller"].email, "password": pw}).status_code == 200
+        assert buyer_client.post("/api/auth/login", json={"email": data["buyer"].email, "password": pw}).status_code == 200
+        assert outsider_client.post("/api/auth/login", json={"email": data["outsider"].email, "password": pw}).status_code == 200
+
+        # 1. Buyer submits initial offer of 450
+        off = buyer_client.post("/api/offers", json={"listing_id": listing_id, "offered_price": "450.00"}).json()
+        offer_id = off["offer_id"]
+        assert off["status"] == "pending"
+        assert off["last_actor"] == "buyer"
+
+        # 2. Seller counteroffers with 520
+        c1 = seller_client.patch(
+            f"/api/offers/{offer_id}",
+            json={"status": "countered", "offered_price": "520.00"},
+        )
+        assert c1.status_code == 200
+        assert c1.json()["status"] == "countered"
+        assert c1.json()["last_actor"] == "seller"
+        assert Decimal(str(c1.json()["offered_price"])) == Decimal("520.00")
+
+        # Outsider cannot counteroffer or accept
+        assert outsider_client.patch(
+            f"/api/offers/{offer_id}",
+            json={"status": "countered", "offered_price": "400.00"},
+        ).status_code == 403
+
+        # 3. Buyer counteroffers back with 490
+        c2 = buyer_client.patch(
+            f"/api/offers/{offer_id}",
+            json={"status": "countered", "offered_price": "490.00"},
+        )
+        assert c2.status_code == 200
+        assert c2.json()["last_actor"] == "buyer"
+        assert Decimal(str(c2.json()["offered_price"])) == Decimal("490.00")
+
+        # 4. Seller sends final counteroffer of 500
+        c3 = seller_client.patch(
+            f"/api/offers/{offer_id}",
+            json={"status": "countered", "offered_price": "500.00"},
+        )
+        assert c3.status_code == 200
+        assert c3.json()["last_actor"] == "seller"
+
+        # 5. Buyer accepts seller's counteroffer (500.00)
+        acc = buyer_client.patch(f"/api/offers/{offer_id}", json={"status": "accepted"})
+        assert acc.status_code == 200
+        assert acc.json()["status"] == "accepted"
+        assert buyer_client.get(f"/api/listings/{listing_id}").json()["status"] == "reserved"
+
+        # 6. Demo payment uses accepted price 500.00 and generates receipt with 500.00
+        pay = buyer_client.post("/api/payments/mock", json={"offer_id": offer_id, "outcome": "success"})
+        assert pay.status_code == 201
+        assert Decimal(str(pay.json()["amount"])) == Decimal("500.00")
+        sale_id = pay.json()["sale_id"]
+
+        rcpt = buyer_client.get(f"/api/sales/{sale_id}/receipt")
+        assert rcpt.status_code == 200
+        assert b"500.00" in rcpt.content
+
+
+def test_forgot_password_and_admin_reset_workflow(client, db_session):
+    """Issue 9: Student submits forgot-password request -> Admin verifies & resets password using Argon2id."""
+    data = _seed_marketplace_users(db_session)
+    pw = data["password"]
+    student_email = data["buyer"].email
+    student_phone = data["buyer"].phone_no
+
+    with (
+        TestClient(fastapi_app) as guest_client,
+        TestClient(fastapi_app) as student_client,
+        TestClient(fastapi_app) as admin_client,
+    ):
+        # 1. Guest submits forgot-password request with registered phone number
+        req_res = guest_client.post(
+            "/api/auth/forgot-password",
+            json={
+                "email": student_email,
+                "phone_no": student_phone,
+                "reason": "Forgot password before exams",
+            },
+        )
+        assert req_res.status_code == 201
+
+        # Unauthorized student cannot access admin password-reset endpoints
+        student_client.post("/api/auth/login", json={"email": data["outsider"].email, "password": pw})
+        assert student_client.get("/api/admin/password-resets").status_code == 403
+
+        # 2. Admin logs in, inspects request, and sets a new temporary password
+        assert admin_client.post("/api/auth/login", json={"email": data["admin"].email, "password": pw}).status_code == 200
+        resets = admin_client.get("/api/admin/password-resets?status=pending").json()
+        assert resets["total"] == 1
+        req_item = resets["items"][0]
+        assert "Identity verified" in req_item["reason"]
+        req_id = req_item["request_id"]
+
+        new_temp_pw = "TempResetPass987!"
+        reset_res = admin_client.patch(
+            f"/api/admin/password-resets/{req_id}",
+            json={
+                "action": "reset",
+                "new_password": new_temp_pw,
+                "admin_comment": "Phone verified; issued temporary password.",
+            },
+        )
+        assert reset_res.status_code == 200
+        assert reset_res.json()["status"] == "approved"
+        assert new_temp_pw not in reset_res.text
+
+        # 3. Old password no longer works; new temporary password logs in cleanly
+        assert guest_client.post("/api/auth/login", json={"email": student_email, "password": pw}).status_code == 401
+        assert guest_client.post("/api/auth/login", json={"email": student_email, "password": new_temp_pw}).status_code == 200
