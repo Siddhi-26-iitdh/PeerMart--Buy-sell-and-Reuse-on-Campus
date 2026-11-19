@@ -13,9 +13,9 @@ PeerMart is an AI-enabled campus marketplace that lets IIT Dharwad students buy,
 - **Backend:** Python 3.12, FastAPI, SQLAlchemy 2.0, Pydantic v2
 - **Database & Migrations:** MySQL 8.0, Alembic (`alembic upgrade head` through revision `8c9d0e1f2a3b`)
 - **Authentication & Security:** Session-based HTTP-only cookies (`SessionMiddleware`), Argon2 salted password hashing (`argon2-cffi`), role-based access control (`student`, `admin`), and strict ownership enforcement
-- **AI Natural-Language Search:** Groq API (`llama-3.3-70b-versatile`) with structured JSON extraction, word-boundary relevance matching, rate limiting, prompt-injection protection, and deterministic keyword-search fallback
+- **AI Natural-Language Search:** Groq API (`openai/gpt-oss-20b`) with structured JSON extraction, word-boundary relevance matching, rate limiting, prompt-injection protection, and deterministic keyword-search fallback
 - **Image Storage:** Supabase Storage (122 hosted product images across 56 listings) + validated local multipart uploads (`/api/uploads`, 2–5 JPEG/PNG images per listing, max 5 MB each)
-- **Testing & CI:** Pytest (`>= 70%` backend coverage), Playwright E2E tests, Ruff linting, GitHub Actions CI
+- **Testing & CI:** Pytest (88.48% recorded backend line coverage (CI artifact)), Playwright E2E tests, Ruff linting, GitHub Actions CI
 
 ## Key Features & Workflows
 
@@ -33,29 +33,27 @@ PeerMart is an AI-enabled campus marketplace that lets IIT Dharwad students buy,
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` in the repository root before starting Docker Compose:
+Copy `.env.example` to `.env` in the repository root before starting Docker Compose. The provided `.env.example` contains older Gemini placeholders; replace those with the Groq settings shown below:
 
 | Variable | Description | Default / Example |
 |---|---|---|
-| `MYSQL_ROOT_PASSWORD` | MySQL 8 root password | `rootpass` |
-| `MYSQL_DATABASE` | MySQL database name | `peermart` |
-| `MYSQL_USER` | MySQL application user | `peermart` |
-| `MYSQL_PASSWORD` | MySQL application password | `peermart` |
-| `DATABASE_URL` | SQLAlchemy MySQL connection string | `mysql+pymysql://peermart:peermart@db:3306/peermart` |
+| `DB_ROOT_PASSWORD` | MySQL 8 root password used by Compose | `rootpass` (development only) |
+| `DB_PASSWORD` | MySQL application password used by Compose | `peermart` (development only) |
 | `PEERMART_SESSION_SECRET` | Secret key for signing session cookies | Set a strong random string |
 | `PEERMART_DEMO_PASSWORD` | Initial password used only when seeding an empty DB | Set before first run |
 | `GROQ_API_KEY` | Backend-only Groq API key for AI Search | `gsk_...` (optional; falls back to keyword parser if unset) |
-| `GROQ_MODEL` | Groq model for structured JSON extraction | `llama-3.3-70b-versatile` |
+| `GROQ_MODEL` | Groq model for structured JSON extraction | `openai/gpt-oss-20b` |
 
 ## Quick Start (Docker Compose on WSL Ubuntu / Linux)
 
 ```bash
 cp .env.example .env
-# Edit .env to set PEERMART_DEMO_PASSWORD and optional GROQ_API_KEY
+# Set DB_ROOT_PASSWORD, DB_PASSWORD, PEERMART_SESSION_SECRET,
+# PEERMART_DEMO_PASSWORD, and optionally GROQ_API_KEY and GROQ_MODEL in .env
 docker compose up --build -d
 ```
 
-- **Frontend Web App:** `http://localhost:8080`
+- **Frontend Web App:** `http://localhost:8444`
 - **Backend API & OpenAPI Docs:** `http://localhost:8000/docs`
 - **Seeded Demo Accounts:**
   - **Admin:** `testadmin63@iitdh.ac.in` (password: value of `PEERMART_DEMO_PASSWORD`)
@@ -66,8 +64,9 @@ docker compose up --build -d
 
 ```bash
 # Backend Ruff lint + Alembic migration + Pytest with >= 70% coverage
-docker compose exec backend ruff check app/ tests/ alembic/ seed.py
-docker compose exec backend pytest tests/ -v --cov=app --cov-report=term-missing --cov-fail-under=70
+cd backend
+ruff check app/ tests/ alembic/ seed.py
+pytest tests/ -v --cov=app --cov-report=term-missing --cov-fail-under=70
 
 # Frontend TypeScript & Vite production build
 cd frontend && npm ci && npm run build
@@ -84,3 +83,35 @@ cd frontend && PEERMART_DEMO_PASSWORD="<your-demo-password>" npx playwright test
 
 **Project Guide:** Prof. Gayathri A.
 **Course:** CS602C – Advanced Software Development Laboratory
+
+
+## MS-6 Final Submission and Design References (19 November 2026)
+
+- **Final presentation and report:** Stored in the team's Google Drive folder `MS6_Final_Deliverables` (PPT and Final Report). A shareable Drive URL has not been provided here.
+- **Figma prototype:** [PeerMart interactive prototype](https://www.figma.com/make/KSWYKohtv3cIhkfsQnVF4n/PeerMart?t=Lbxom9HP25ODrPnB-20&fullscreen=1)
+- **ER diagram:** [MS-2 ER diagram](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/blob/main/MS2_ER_Diagram.pdf)
+- **OpenAPI contract:** [docs/openapi.yaml](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/blob/main/docs/openapi.yaml)
+- **Architecture report:** [MS-5 architecture](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/blob/main/MS5_Deliverables/MS5_PeerMart_Architecture_Report.pdf)
+- **AI usage declaration:** [AI_USAGE.md](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/blob/main/AI_USAGE.md)
+- **CI coverage evidence:** [docs/coverage.xml](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/blob/main/docs/coverage.xml) and [GitHub Actions](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/actions)
+- **All merged pull requests:** [GitHub pull requests](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pulls?q=is%3Apr+state%3Aclosed)
+
+### Final dataset and evaluation
+
+The project documentation records **8 categories, 56 product listings, 122 images, and 20 fictional user accounts** (19 students and one admin). The AI evaluation dataset contains **50 predefined cases**: 20 genuine queries, 15 prompt-injection attempts and 15 invalid/malformed requests. The automated fallback-mode test checks expected API responses; it does **not** independently measure live Groq semantic accuracy. See [AI_USAGE.md](AI_USAGE.md) for limitations.
+
+### Testing and coverage
+
+The committed CI-generated `docs/coverage.xml` records **384 covered lines out of 434 (88.48% line coverage)**. This is a historical report artifact and is not a claim that the latest commit was rerun. Automated tests include pytest backend checks; the repository also contains browser/E2E test assets.
+
+### Milestone-wise contributions and representative PRs
+
+| Member | Main contributions | Representative PRs |
+|---|---|---|
+| Siddhi Avhad | Figma/frontend, seed and Docker initialization, API integration tests, marketplace UI/workflows | [#3](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pull/3), [#6](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pull/6), [#21](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pull/21) |
+| Isha Bhardwaj | API/OpenAPI design, AI search and guardrails, evaluation dataset, CI/deployment documentation | [#8](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pull/8), [#16](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pull/16), [#17](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pull/17) |
+| Radhemohan Yadav | FastAPI/database foundations, authentication and admin workflows, transactions, deployment and MS-6 fixes | [#12](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pull/12), [#18](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pull/18), [#24](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pull/24), [#25](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pull/25), [#26](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pull/26) |
+
+**Attribution note:** PR submitter and underlying implementer can differ; milestone reports attribute MS-3 backend work to Radhemohan Yadav and API contract work to Isha Bhardwaj even though PRs [#1](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pull/1) and [#2](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pull/2) were submitted through the repository owner's account.
+
+**Deployment caution:** Change all development default passwords and the session secret before any public deployment. Demo payments are simulated; no real-money gateway is integrated.
