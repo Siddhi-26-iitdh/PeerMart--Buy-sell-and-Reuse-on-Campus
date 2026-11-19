@@ -44,6 +44,116 @@ Copy `.env.example` to `.env` in the repository root before starting Docker Comp
 | `GROQ_API_KEY` | Backend-only Groq API key for AI Search | `gsk_...` (optional; falls back to keyword parser if unset) |
 | `GROQ_MODEL` | Groq model for structured JSON extraction | `openai/gpt-oss-20b` |
 
+## How to Run PeerMart Locally
+
+PeerMart is containerized using Docker Compose. The complete application includes a React frontend, FastAPI backend, and MySQL database. Users do not need to install Python, Node.js, or MySQL separately.
+
+### Prerequisites
+
+- Git
+- Docker Desktop (Windows/macOS) or Docker Engine with Compose (Linux)
+- An internet connection for downloading Docker images and application dependencies
+- A Groq API key (optional, for AI-powered search)
+
+### Step 1: Clone the Repository
+
+Open a terminal and run:
+
+```bash
+git clone https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus.git
+cd PeerMart--Buy-sell-and-Reuse-on-Campus
+```
+
+### Step 2: Configure Environment Variables
+
+Create the environment configuration file:
+
+```bash
+cp .env.example .env
+```
+
+On Windows PowerShell, use:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Edit `.env` and configure the required variables:
+
+```env
+DB_ROOT_PASSWORD=your_root_password
+DB_PASSWORD=your_database_password
+PEERMART_SESSION_SECRET=your_long_random_secret
+PEERMART_DEMO_PASSWORD=your_demo_password
+
+GROQ_API_KEY=
+GROQ_MODEL=openai/gpt-oss-20b
+```
+
+The Groq API key is optional. Without it, PeerMart uses its deterministic keyword-search fallback.
+
+### Step 3: Start the Application
+
+Make sure Docker is running, then execute:
+
+```bash
+docker compose up --build -d
+```
+
+Docker Compose builds and starts the application services. The backend initializes the database and loads the demonstration dataset during first-time setup.
+
+### Step 4: Open the Website
+
+| Service | URL |
+|---|---|
+| **PeerMart Website** | http://localhost:8444 |
+| **FastAPI Swagger Documentation** | http://localhost:8000/docs |
+
+### Step 5: Login Using Demo Accounts
+
+| Role | Email | Password |
+|---|---|---|
+| Administrator | `testadmin63@iitdh.ac.in` | Value of `PEERMART_DEMO_PASSWORD` |
+| Student | `testuser01@iitdh.ac.in` | Value of `PEERMART_DEMO_PASSWORD` |
+
+The initial dataset contains 20 fictional user accounts, 56 listings, and 122 product images.
+
+### Useful Docker Commands
+
+Check running containers:
+
+```bash
+docker compose ps
+```
+
+View application logs:
+
+```bash
+docker compose logs -f
+```
+
+Stop the application:
+
+```bash
+docker compose down
+```
+
+Restart the application:
+
+```bash
+docker compose up -d
+```
+
+**Note:** Do not use `docker compose down -v` unless you intentionally want to delete the database volume and its stored data.
+
+### Important Notes
+
+- Docker must be running before starting PeerMart.
+- The application runs locally and does not require public deployment.
+- AI-powered search requires a valid Groq API key; the remaining marketplace features can work without it.
+- Payments are simulated for demonstration purposes. No real financial transactions occur.
+- Replace all development passwords and session secrets before deploying publicly.
+
 ## Quick Start (Docker Compose on WSL Ubuntu / Linux)
 
 ```bash
@@ -84,6 +194,21 @@ cd frontend && PEERMART_DEMO_PASSWORD="<your-demo-password>" npx playwright test
 **Project Guide:** Prof. Gayathri A.
 **Course:** CS602C – Advanced Software Development Laboratory
 
+
+## Project Milestones and Submissions
+
+PeerMart was developed through six milestones from 15 October to 19 November 2026. Each milestone introduced new functionality, documentation, testing, and deployment improvements. All six milestones have been completed, and the final project is available in this GitHub repository.
+
+| Milestone | Date | Completed Work | Submission / Evidence |
+|---|---|---|---|
+| **MS-1** | 15 Oct 2026 | Problem statement, dataset planning, sitemap, user stories, AI feature proposal, and repository setup | [GitHub Repository](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus) |
+| **MS-2** | 22 Oct 2026 | Interactive Figma prototype, database design, 3NF ER diagram, relationships, and constraints | [Figma Prototype](https://www.figma.com/make/KSWYKohtv3cIhkfsQnVF4n/PeerMart) · [ER Diagram](MS2_ER_Diagram.pdf) |
+| **MS-3** | 29 Oct 2026 | FastAPI backend, MySQL database, eight related tables, Alembic migrations, seed dataset, and OpenAPI specification | [OpenAPI YAML](docs/openapi.yaml) · [PR #1](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pull/1) · [PR #2](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pull/2) |
+| **MS-4** | 5 Nov 2026 | Running frontend/backend, Docker integration, unit and integration testing, GitHub Actions, and coverage verification | [GitHub Actions](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/actions) · [Coverage Report](docs/coverage.xml) |
+| **MS-5** | 12 Nov 2026 | Authentication, marketplace workflows, AI search, guardrails, evaluation, admin features, and end-to-end testing | [MS-5 Deliverables](MS5_Deliverables/) |
+| **MS-6** | 19 Nov 2026 | Final presentation, live demonstration, individual viva, final report, documentation, and project integration | [MS-6 Final Deliverables](MS6_Deliverables/) · [PR #27](https://github.com/Siddhi-26-iitdh/PeerMart--Buy-sell-and-Reuse-on-Campus/pull/27) |
+
+**Final submission:** The `MS6_Deliverables/` directory contains the final project presentation (`.pptx`) and final project report (`.pdf`). Supporting technical documentation, including the API contract, ER diagram, AI usage declaration, and test coverage report, is available in the repository.
 
 ## MS-6 Final Submission and Design References (19 November 2026)
 
